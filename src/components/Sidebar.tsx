@@ -276,6 +276,7 @@ const DroppableListItem: React.FC<DroppableListItemProps> = ({ list, isActive, o
                     
                     // Check which emails exist
                     const results = await db.checkUsersExist(emails);
+                    console.log('Email validation results:', results);
                     const validEmails = results.filter(r => r.exists).map(r => r.email);
                     const invalidEmails = results.filter(r => !r.exists).map(r => r.email);
                     

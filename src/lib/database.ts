@@ -237,16 +237,27 @@ export const db = {
 
   // Check if users exist by email
   async checkUsersExist(emails: string[]): Promise<{ email: string; exists: boolean }[]> {
-    const { data, error } = await supabase
-      .rpc('check_users_exist', { emails });
+    try {
+      const { data, error } = await supabase
+        .rpc('check_users_exist', { emails });
 
-    if (error) throw error;
-    
-    // Map user_exists to exists for consistency
-    return (data || []).map((item: { email: string; user_exists: boolean }) => ({
-      email: item.email,
-      exists: item.user_exists
-    }));
+      if (error) {
+        console.error('RPC error:', error);
+        throw error;
+      }
+      
+      console.log('RPC response:', data);
+      
+      // Map user_exists to exists for consistency
+      return (data || []).map((item: { email: string; user_exists: boolean }) => ({
+        email: item.email,
+        exists: item.user_exists
+      }));
+    } catch (error) {
+      console.error('checkUsersExist error:', error);
+      // If RPC fails, we'll assume emails are invalid for safety
+      return emails.map(email => ({ email, exists: false }));
+    }
   },
 };
 
