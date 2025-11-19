@@ -361,12 +361,15 @@ export const Sidebar: React.FC = () => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    // Close settings modal immediately
-    setShowSettingsModal(false);
-    
     setIsImporting(true);
     setImportProgress(0);
-    
+
+    // Small delay to ensure progress modal renders before continuing
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Close settings modal after progress modal is visible
+    setShowSettingsModal(false);
+
     try {
       // Convert file to base64
       const reader = new FileReader();
