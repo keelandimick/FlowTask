@@ -17,6 +17,7 @@ export interface BaseItem {
   createdAt: Date;
   updatedAt: Date;
   listId: string;
+  category?: string;
   recurrence?: RecurrenceSettings;
   metadata?: Record<string, any>;
   deletedAt?: Date;
@@ -55,6 +56,7 @@ export interface User {
 }
 
 export type ViewMode = 'tasks' | 'reminders' | 'recurring' | 'trash' | 'complete';
+export type DisplayMode = 'column' | 'category';
 
 export type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly' | 'yearly';
 

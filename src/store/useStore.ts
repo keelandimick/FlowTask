@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Item, List, ViewMode, TaskStatus, ReminderStatus } from '../types';
+import { Item, List, ViewMode, DisplayMode, TaskStatus, ReminderStatus } from '../types';
 import { db } from '../lib/database';
 import { calculateReminderStatus } from '../utils/dateUtils';
 
@@ -8,6 +8,7 @@ interface Store {
   lists: List[];
   currentListId: string;
   currentView: ViewMode;
+  displayMode: DisplayMode;
   selectedItemId: string | null;
   highlightedItemId: string | null;
   loading: boolean;
@@ -35,6 +36,7 @@ interface Store {
 
   setCurrentList: (listId: string) => void;
   setCurrentView: (view: ViewMode) => void;
+  setDisplayMode: (mode: DisplayMode) => void;
   setSelectedItem: (itemId: string | null) => void;
   setHighlightedItem: (itemId: string | null) => void;
   setSearchQuery: (query: string) => void;
@@ -50,6 +52,7 @@ export const useStore = create<Store>((set, get) => ({
   lists: [],
   currentListId: '',
   currentView: 'tasks',
+  displayMode: 'column',
   selectedItemId: null,
   highlightedItemId: null,
   loading: false,
@@ -195,17 +198,35 @@ export const useStore = create<Store>((set, get) => ({
     try {
       // Soft delete - mark as deleted instead of removing
       const now = new Date();
+
+      // First update local state optimistically and protect it
+      set((state) => {
+        const newRecentlyUpdated = new Set(state.recentlyUpdatedItems);
+        newRecentlyUpdated.add(id);
+
+        // Clear this item from protection after 20 seconds
+        setTimeout(() => {
+          set((s) => {
+            const updated = new Set(s.recentlyUpdatedItems);
+            updated.delete(id);
+            return { recentlyUpdatedItems: updated };
+          });
+        }, 20000);
+
+        return {
+          items: state.items.map((item) =>
+            item.id === id
+              ? { ...item, deletedAt: now, updatedAt: now }
+              : item
+          ),
+          // Clear selected item if it's the one being deleted
+          selectedItemId: state.selectedItemId === id ? null : state.selectedItemId,
+          recentlyUpdatedItems: newRecentlyUpdated
+        };
+      });
+
+      // Then update the database
       await db.updateItem(id, { deletedAt: now }, userId);
-      
-      set((state) => ({
-        items: state.items.map((item) =>
-          item.id === id
-            ? { ...item, deletedAt: now, updatedAt: now }
-            : item
-        ),
-        // Clear selected item if it's the one being deleted
-        selectedItemId: state.selectedItemId === id ? null : state.selectedItemId
-      }));
     } catch (error) {
       console.error('Failed to delete item:', error);
       set({ error: error instanceof Error ? error.message : 'Failed to delete item' });
@@ -474,6 +495,10 @@ export const useStore = create<Store>((set, get) => ({
   
   setCurrentView: (view) => {
     set({ currentView: view });
+  },
+
+  setDisplayMode: (mode) => {
+    set({ displayMode: mode });
   },
   
   

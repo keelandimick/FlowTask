@@ -3,6 +3,7 @@ import { useDroppable } from '@dnd-kit/core';
 import { useStoreWithAuth } from '../store/useStoreWithAuth';
 import { TaskModal } from './TaskModal';
 import { useAuth } from '../contexts/AuthContext';
+import { categorizeItems } from '../lib/ai';
 
 interface DroppableListItemProps {
   list: any;
@@ -319,6 +320,7 @@ export const Sidebar: React.FC = () => {
   const [importProgress, setImportProgress] = React.useState(0);
   const [showSettingsModal, setShowSettingsModal] = React.useState(false);
   const [showAllList, setShowAllList] = React.useState(true);
+  const [isCategorizing, setIsCategorizing] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // Load showAllList preference from localStorage when user is available
@@ -371,125 +373,137 @@ export const Sidebar: React.FC = () => {
     setShowSettingsModal(false);
 
     try {
-      // Convert file to base64
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        const base64 = reader.result?.toString().split(',')[1];
-        if (!base64) return;
-        
-        setImportProgress(25); // File loaded
-        
-        // Import the extractTasksFromImage function
-        const { extractTasksFromImage } = await import('../lib/ai');
-        
-        setImportProgress(30); // Starting AI processing
-        
-        // Extract tasks from image
-        const extractedTasks = await extractTasksFromImage(
-          base64, 
-          file.type.includes('pdf') ? 'pdf' : 'image',
-          lists.map(l => ({ id: l.id, name: l.name }))
-        );
-        
-        setImportProgress(75); // AI done, adding tasks
-        
-        // Import Chrono for date parsing
-        const customChrono = (await import('../lib/chronoConfig')).default;
-        
-        // Filter out duplicates before adding (exclude completed items)
-        const existingTitles = new Set(
-          items.filter(item => !item.deletedAt && item.status !== 'complete')
-            .map(item => item.title.toLowerCase())
-        );
-        
-        const uniqueTasks = extractedTasks.filter(task => 
-          !existingTitles.has(task.title.toLowerCase())
-        );
-        
-        const skippedCount = extractedTasks.length - uniqueTasks.length;
-        
-        // Add all unique tasks in parallel for better performance
-        const addPromises = uniqueTasks.map(task => {
-          let type: 'task' | 'reminder' = 'task';
-          let title = task.title;
-          let reminderDate = null;
-          let recurrence = undefined;
-          let status: any = 'start';
-          
-          // Check for recurring patterns first
-          const recurringMatch = title.match(/\b(every\s+(other\s+)?\d*\s*(day|week|month|year|hours?|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|daily|weekly|monthly|yearly|annually|weekdays?|weekends?)\b/i);
-          if (recurringMatch) {
-            // Extract recurrence and clean title
-            title = title.replace(recurringMatch[0], '').trim();
-            if (title.length > 0) {
-              title = title.charAt(0).toUpperCase() + title.slice(1);
+      // Convert file to base64 - wrapped in Promise to properly await
+      await new Promise<void>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+          try {
+            const base64 = reader.result?.toString().split(',')[1];
+            if (!base64) {
+              reject(new Error('Failed to read file'));
+              return;
             }
-            type = 'reminder';
-            recurrence = {
-              frequency: 'weekly' as const,
-              time: '09:00',
-              originalText: recurringMatch[0]
-            };
-            status = 'weekly'; // Set status to match frequency
-          } else {
-            // Check for single date
-            const parsedDate = customChrono.parseDate(title);
-            if (parsedDate) {
-              const parsedText = customChrono.parse(title)[0].text;
-              title = title.replace(parsedText, '').trim();
-              if (title.length > 0) {
-                title = title.charAt(0).toUpperCase() + title.slice(1);
-              }
-              type = 'reminder';
-              reminderDate = parsedDate;
-              
-              // Calculate and set the appropriate status
-              const now = new Date();
-              const reminderDateOnly = new Date(parsedDate.getFullYear(), parsedDate.getMonth(), parsedDate.getDate());
-              const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-              const diffTime = reminderDateOnly.getTime() - todayStart.getTime();
-              const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
-              
-              if (diffDays < 0) {
-                status = 'today';
-              } else if (diffDays === 0) {
-                status = 'today';
-              } else if (diffDays <= 7) {
-                status = 'within7';
+
+            setImportProgress(25); // File loaded
+
+            // Import the extractTasksFromImage function
+            const { extractTasksFromImage } = await import('../lib/ai');
+
+            setImportProgress(30); // Starting AI processing
+
+            // Extract tasks from image
+            const extractedTasks = await extractTasksFromImage(
+              base64,
+              file.type.includes('pdf') ? 'pdf' : 'image',
+              lists.map(l => ({ id: l.id, name: l.name }))
+            );
+
+            setImportProgress(75); // AI done, adding tasks
+
+            // Import Chrono for date parsing
+            const customChrono = (await import('../lib/chronoConfig')).default;
+
+            // Filter out duplicates before adding (exclude completed items)
+            const existingTitles = new Set(
+              items.filter(item => !item.deletedAt && item.status !== 'complete')
+                .map(item => item.title.toLowerCase())
+            );
+
+            const uniqueTasks = extractedTasks.filter(task =>
+              !existingTitles.has(task.title.toLowerCase())
+            );
+
+            const skippedCount = extractedTasks.length - uniqueTasks.length;
+
+            // Add all unique tasks in parallel for better performance
+            const addPromises = uniqueTasks.map(task => {
+              let type: 'task' | 'reminder' = 'task';
+              let title = task.title;
+              let reminderDate = null;
+              let recurrence = undefined;
+              let status: any = 'start';
+
+              // Check for recurring patterns first
+              const recurringMatch = title.match(/\b(every\s+(other\s+)?\d*\s*(day|week|month|year|hours?|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|daily|weekly|monthly|yearly|annually|weekdays?|weekends?)\b/i);
+              if (recurringMatch) {
+                // Extract recurrence and clean title
+                title = title.replace(recurringMatch[0], '').trim();
+                if (title.length > 0) {
+                  title = title.charAt(0).toUpperCase() + title.slice(1);
+                }
+                type = 'reminder';
+                recurrence = {
+                  frequency: 'weekly' as const,
+                  time: '09:00',
+                  originalText: recurringMatch[0]
+                };
+                status = 'weekly'; // Set status to match frequency
               } else {
-                status = '7plus';
+                // Check for single date
+                const parsedDate = customChrono.parseDate(title);
+                if (parsedDate) {
+                  const parsedText = customChrono.parse(title)[0].text;
+                  title = title.replace(parsedText, '').trim();
+                  if (title.length > 0) {
+                    title = title.charAt(0).toUpperCase() + title.slice(1);
+                  }
+                  type = 'reminder';
+                  reminderDate = parsedDate;
+
+                  // Calculate and set the appropriate status
+                  const now = new Date();
+                  const reminderDateOnly = new Date(parsedDate.getFullYear(), parsedDate.getMonth(), parsedDate.getDate());
+                  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                  const diffTime = reminderDateOnly.getTime() - todayStart.getTime();
+                  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+                  if (diffDays < 0) {
+                    status = 'today';
+                  } else if (diffDays === 0) {
+                    status = 'today';
+                  } else if (diffDays <= 7) {
+                    status = 'within7';
+                  } else {
+                    status = '7plus';
+                  }
+                }
               }
+
+              const itemData: any = {
+                type,
+                title,
+                priority: task.priority,
+                status,
+                listId: task.listId,
+                recurrence
+              };
+
+              // Only add reminderDate for reminder type
+              if (type === 'reminder' && reminderDate) {
+                itemData.reminderDate = reminderDate;
+              }
+
+              return addItem(itemData);
+            });
+
+            await Promise.all(addPromises);
+
+            setImportProgress(100); // Complete
+            if (skippedCount > 0) {
+              alert(`Successfully imported ${uniqueTasks.length} tasks! (${skippedCount} duplicates skipped)`);
+            } else {
+              alert(`Successfully imported ${uniqueTasks.length} tasks!`);
             }
+
+            resolve();
+          } catch (error) {
+            reject(error);
           }
-          
-          const itemData: any = {
-            type,
-            title,
-            priority: task.priority,
-            status,
-            listId: task.listId,
-            recurrence
-          };
-          
-          // Only add reminderDate for reminder type
-          if (type === 'reminder' && reminderDate) {
-            itemData.reminderDate = reminderDate;
-          }
-          
-          return addItem(itemData);
-        });
-        
-        await Promise.all(addPromises);
-        
-        setImportProgress(100); // Complete
-        if (skippedCount > 0) {
-          alert(`Successfully imported ${uniqueTasks.length} tasks! (${skippedCount} duplicates skipped)`);
-        } else {
-          alert(`Successfully imported ${uniqueTasks.length} tasks!`);
-        }
-      };
-      
-      reader.readAsDataURL(file);
+        };
+
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
     } catch (error) {
       console.error('Import error:', error);
       alert('Failed to import tasks. Please try again.');
@@ -743,7 +757,61 @@ export const Sidebar: React.FC = () => {
                   />
                 </label>
               </div>
-              
+
+              {/* Re-categorize all button */}
+              <button
+                onClick={async () => {
+                  if (window.confirm('Re-categorize all items? This will use AI to reorganize items in all your lists based on their content.')) {
+                    setIsCategorizing(true);
+                    try {
+                      // Categorize each list separately
+                      for (const list of lists) {
+                        const listItems = items.filter(item =>
+                          item.listId === list.id &&
+                          !item.deletedAt &&
+                          item.status !== 'complete'
+                        );
+
+                        if (listItems.length > 0) {
+                          const categorizations = await categorizeItems(
+                            listItems.map(item => ({ id: item.id, title: item.title })),
+                            list.name
+                          );
+
+                          // Update all items with their categories
+                          const { updateItem } = await import('../store/useStoreWithAuth');
+                          for (const cat of categorizations) {
+                            // Use direct database update to avoid triggering re-categorization
+                            const { db } = await import('../lib/database');
+                            if (userId) {
+                              await db.updateItem(cat.id, { category: cat.category }, userId);
+                            }
+                          }
+                        }
+                      }
+
+                      alert('All items have been re-categorized successfully!');
+                      // Reload data to show new categories
+                      window.location.reload();
+                    } catch (error) {
+                      console.error('Failed to re-categorize:', error);
+                      alert('Failed to re-categorize items. Please try again.');
+                    } finally {
+                      setIsCategorizing(false);
+                    }
+                  }
+                }}
+                disabled={isCategorizing}
+                className={`w-full px-4 py-2 text-left rounded-lg transition-colors flex items-center ${
+                  isCategorizing
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                <span className="mr-2">🏷️</span>
+                {isCategorizing ? 'Re-categorizing...' : 'Re-categorize All Items'}
+              </button>
+
               {/* Clear Data button */}
               <button
                 onClick={async () => {

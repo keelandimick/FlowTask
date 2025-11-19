@@ -15,6 +15,8 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ activeId, notesOpen }) => 
   const {
     currentView,
     setCurrentView,
+    displayMode,
+    setDisplayMode,
     getFilteredItems,
     emptyTrash,
     currentListId,
@@ -92,11 +94,32 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ activeId, notesOpen }) => 
     { id: 'complete', title: 'Completed Items' },
   ];
 
-  const columns = currentView === 'tasks' ? taskColumns : 
-                  currentView === 'reminders' ? reminderColumns : 
-                  currentView === 'recurring' ? recurringColumns :
-                  currentView === 'trash' ? trashColumns :
-                  completeColumns;
+  // Get category columns from items
+  const getCategoryColumns = () => {
+    const categories = new Set<string>();
+    items.forEach(item => {
+      if (item.category) {
+        categories.add(item.category);
+      }
+    });
+
+    // If no categories, show an "Uncategorized" column
+    if (categories.size === 0) {
+      return [{ id: 'uncategorized', title: 'Uncategorized' }];
+    }
+
+    return Array.from(categories)
+      .sort()
+      .map(cat => ({ id: cat, title: cat }));
+  };
+
+  const columns = displayMode === 'category'
+    ? getCategoryColumns()
+    : currentView === 'tasks' ? taskColumns :
+      currentView === 'reminders' ? reminderColumns :
+      currentView === 'recurring' ? recurringColumns :
+      currentView === 'trash' ? trashColumns :
+      completeColumns;
 
   // Get the current view title and color
   const getViewInfo = () => {
@@ -228,6 +251,34 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ activeId, notesOpen }) => 
               </button>
               </div>
 
+              {/* Column/Category toggle */}
+              {currentView !== 'complete' && (
+                <div className="flex items-center gap-1 pb-2 bg-gray-100 rounded-lg p-1">
+                  <button
+                    onClick={() => setDisplayMode('column')}
+                    className={`px-3 py-1 text-xs rounded transition-all ${
+                      displayMode === 'column'
+                        ? 'bg-white text-gray-900 shadow-sm font-medium'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                    title="Column view - organize by status"
+                  >
+                    Columns
+                  </button>
+                  <button
+                    onClick={() => setDisplayMode('category')}
+                    className={`px-3 py-1 text-xs rounded transition-all ${
+                      displayMode === 'category'
+                        ? 'bg-white text-gray-900 shadow-sm font-medium'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                    title="Category view - organize by AI categories"
+                  >
+                    Categories
+                  </button>
+                </div>
+              )}
+
               {/* Search, User info and dark mode toggle */}
               <div className="flex items-center gap-3 pb-2">
                 <SearchBar onResultClick={handleSearchResultClick} />
@@ -311,17 +362,25 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ activeId, notesOpen }) => 
           {columns.map((column, index) => (
             <React.Fragment key={column.id}>
               <TaskColumn
-              title={column.title}
-              columnId={column.id}
-              items={currentView === 'trash' ? items : items.filter(item => item.status === column.id)}
-            />
+                title={column.title}
+                columnId={column.id}
+                items={
+                  displayMode === 'category'
+                    ? column.id === 'uncategorized'
+                      ? items.filter(item => !item.category)
+                      : items.filter(item => item.category === column.id)
+                    : currentView === 'trash'
+                      ? items
+                      : items.filter(item => item.status === column.id)
+                }
+              />
               {(index < columns.length - 1 || notesOpen) && (
                 <div className="w-px bg-gray-200" />
               )}
             </React.Fragment>
           ))}
           {notesOpen && (
-            <Notes 
+            <Notes
               isOpen={true}
             />
           )}

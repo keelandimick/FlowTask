@@ -156,6 +156,80 @@ export function renderTextWithLinks(text: string): React.ReactNode {
   return <>{elements}</>;
 }
 
+// Function to categorize items using AI
+export async function categorizeItems(
+  items: Array<{id: string, title: string}>,
+  listName: string
+): Promise<Array<{id: string, category: string}>> {
+  try {
+    if (items.length === 0) {
+      return [];
+    }
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `You are a helpful assistant that organizes tasks into categories.
+
+Given a list of items and the list name, create 3-7 categories that make sense for organizing these items.
+The categories should be:
+1. Contextually appropriate for a "${listName}" list
+2. Short and clear (1-3 words max)
+3. Based on the actual items provided
+4. Logical groupings that help organize the tasks
+
+For example:
+- "Personal" list might have: Shopping, Health, Home, Family, Errands
+- "Work" list might have: Meetings, Projects, Admin, Clients
+- "Fitness" list might have: Cardio, Strength, Meal Prep, Recovery
+
+IMPORTANT RULES:
+1. Consider the list name "${listName}" when creating categories
+2. Don't create business/work categories for personal lists
+3. Don't create personal/home categories for business lists
+4. Create categories based on themes you see in the actual items
+5. Each item must be assigned to exactly one category
+6. You decide how many categories to create (3-7 range) based on item diversity
+
+Return a JSON object with this exact format:
+{
+  "categories": ["Category1", "Category2", "Category3"],
+  "assignments": [
+    {"id": "item-id-1", "category": "Category1"},
+    {"id": "item-id-2", "category": "Category2"}
+  ]
+}`
+        },
+        {
+          role: "user",
+          content: `List name: "${listName}"\n\nItems to categorize:\n${items.map(item => `- ${item.title} (id: ${item.id})`).join('\n')}\n\nCreate appropriate categories for this "${listName}" list and assign each item to a category. Return only the JSON object.`
+        }
+      ],
+      temperature: 0.4,
+      max_tokens: 2000
+    });
+
+    let content = response.choices[0]?.message?.content || '{"categories":[],"assignments":[]}';
+
+    // Remove markdown code blocks if present
+    content = content.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+
+    const parsed = JSON.parse(content);
+
+    // Return the assignments
+    return parsed.assignments || [];
+  } catch (error) {
+    console.error('Categorization error:', error);
+    // Return uncategorized items on error
+    return items.map(item => ({
+      id: item.id,
+      category: 'Uncategorized'
+    }));
+  }
+}
+
 // Function to extract tasks from image or text
 export async function extractTasksFromImage(base64Image: string, _fileType: 'image' | 'pdf', lists: Array<{id: string, name: string}>): Promise<Array<{title: string, listId: string, priority: 'now' | 'high' | 'low'}>> {
   try {

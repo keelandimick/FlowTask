@@ -50,8 +50,38 @@ A modern task management app with lists, reminders, and recurring tasks built wi
 ### 0. Quick Fixes
 - [ ] Fix dark mode toggle - currently doesn't apply dark styles properly
 - [x] Add keyboard shortcut (⌘I / Ctrl+I) to open "Add item" modal
+- [x] Fix bulk upload progress modal not showing
 
-### 1. Push Notifications
+### 1. AI Categorization System
+**Status**: Planned
+**Description**: Add AI-powered category view as an alternative to column-based organization
+
+**Features**:
+- Toggle between Column View (status-based) and Category View (AI-generated categories)
+- AI automatically categorizes items based on content and list context
+- Context-aware: AI considers list name when creating categories (e.g., "Personal" list won't have business categories)
+- Dynamic re-categorization when:
+  - New items are added (re-categorizes all items in that list)
+  - Items are moved between lists (re-categorizes both old and new lists)
+- Manual "Re-categorize all" button in settings
+- AI decides optimal number of categories (no hard limits)
+- Future: Natural language category refinement ("less categories", "more specific names")
+
+**Implementation Requirements**:
+1. Database: Add `category` field to items table (nullable string)
+2. AI Function: Create `categorizeItems(items, listName)` function
+3. UI: Add view toggle in TaskBoard header
+4. UI: Build category view layout (single column per category, wider notes panel)
+5. Logic: Hook categorization into item creation and list movement
+6. Settings: Add "Re-categorize all" button
+
+**Technical Notes**:
+- Categories persist with items (metadata)
+- AI prompt includes list name for context-aware categorization
+- Category view replaces status columns with dynamic category columns
+- Notes panel gets more width in category view (no 3-column layout)
+
+### 2. Push Notifications
 **Status**: Not implemented
 **Description**: Enable push notifications for reminders and shared list updates
 **Requirements**:
