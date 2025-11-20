@@ -18,6 +18,7 @@ export const useStoreWithAuth = () => {
     if (!userId || !user?.email) {
       hasLoadedRef.current = false;
       isLoadingRef.current = false;
+      store.cleanupRealtimeSubscriptions(); // Clean up subscriptions on logout
       return;
     }
 
@@ -31,14 +32,15 @@ export const useStoreWithAuth = () => {
     }
 
     // Set up simple polling every 30 seconds (less aggressive)
+    // Note: Polling is skipped for shared lists (they use realtime)
     const interval = setInterval(() => {
       const timeSinceLastUpdate = Date.now() - lastUpdateRef.current;
-      
+
       // Don't poll for 15 seconds after any update
       if (timeSinceLastUpdate < 15000) {
         return;
       }
-      
+
       if (!isLoadingRef.current) {
         store.loadData(userId);
       }
@@ -151,6 +153,7 @@ export const useStoreWithAuth = () => {
     loading: store.loading,
     error: store.error,
     searchQuery: store.searchQuery,
+    itemsInFlight: store.itemsInFlight,
 
     // Functions that need userId
     addItem,

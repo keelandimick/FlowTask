@@ -1,7 +1,9 @@
 import { create } from 'zustand';
 import { Item, List, ViewMode, DisplayMode, TaskStatus, ReminderStatus } from '../types';
-import { db } from '../lib/database';
+import { db, dbItemToItem, dbListToList, dbNoteToNote } from '../lib/database';
 import { calculateReminderStatus } from '../utils/dateUtils';
+import { supabase } from '../lib/supabase';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 
 interface Store {
   items: Item[];
@@ -14,6 +16,7 @@ interface Store {
   loading: boolean;
   error: string | null;
   recentlyUpdatedItems: Set<string>;
+  itemsInFlight: Set<string>;
   searchQuery: string;
 
   loadData: (userId: string) => Promise<void>;
@@ -43,9 +46,25 @@ interface Store {
 
   getFilteredItems: () => Item[];
   searchItems: (query: string) => Item[];
+
+  // Realtime handlers
+  handleRealtimeInsert: (table: 'items' | 'lists' | 'notes', record: any) => void;
+  handleRealtimeUpdate: (table: 'items' | 'lists' | 'notes', record: any) => void;
+  handleRealtimeDelete: (table: 'items' | 'lists' | 'notes', id: string) => void;
+  isListShared: (listId: string) => boolean;
+
+  // Realtime subscription management
+  setupRealtimeSubscriptions: () => void;
+  cleanupRealtimeSubscriptions: () => void;
 }
 
-
+// Store Realtime channels outside of Zustand state (they're not serializable)
+let realtimeChannels: {
+  items?: RealtimeChannel;
+  lists?: RealtimeChannel;
+  notes?: RealtimeChannel;
+} = {};
+let subscriptionsActive = false;
 
 export const useStore = create<Store>((set, get) => ({
   items: [],
@@ -58,6 +77,7 @@ export const useStore = create<Store>((set, get) => ({
   loading: false,
   error: null,
   recentlyUpdatedItems: new Set<string>(),
+  itemsInFlight: new Set<string>(),
   searchQuery: '',
   
   loadData: async (userId: string) => {
@@ -111,17 +131,20 @@ export const useStore = create<Store>((set, get) => ({
         return dbItem;
       });
       
-      set({ 
-        lists, 
+      set({
+        lists,
         items: mergedItems,
         currentListId: selectedListId,
-        loading: false 
+        loading: false
       });
+
+      // Set up realtime subscriptions after data loads
+      get().setupRealtimeSubscriptions();
     } catch (error) {
       console.error('Failed to load data:', error);
-      set({ 
+      set({
         error: error instanceof Error ? error.message : 'Failed to load data',
-        loading: false 
+        loading: false
       });
     }
   },
@@ -146,46 +169,81 @@ export const useStore = create<Store>((set, get) => ({
   updateItem: async (id, updates, userId) => {
     set({ error: null });
     try {
-      // First update the local state optimistically and track it
-      set((state) => {
-        const newRecentlyUpdated = new Set(state.recentlyUpdatedItems);
-        newRecentlyUpdated.add(id);
-        
-        // Clear this item from recently updated after 20 seconds
-        setTimeout(() => {
-          set((s) => {
-            const updated = new Set(s.recentlyUpdatedItems);
-            updated.delete(id);
-            return { recentlyUpdatedItems: updated };
-          });
-        }, 20000);
-        
-        return {
-          items: state.items.map((item) =>
-            item.id === id
-              ? { ...item, ...updates, updatedAt: new Date() } as Item
-              : item
-          ),
-          recentlyUpdatedItems: newRecentlyUpdated
-        };
-      });
-      
-      // Then update the database
-      await db.updateItem(id, updates, userId);
-      
-      // If the update included a status change for reminders, ensure it's properly calculated
-      if (updates.type === 'reminder' && updates.reminderDate && !updates.status) {
-        const calculatedStatus = calculateReminderStatus(updates.reminderDate);
-        set((state) => ({
-          items: state.items.map((item) =>
-            item.id === id
-              ? { ...item, status: calculatedStatus } as Item
-              : item
-          ),
+      const state = get();
+      const item = state.items.find(i => i.id === id);
+      if (!item) throw new Error('Item not found');
+
+      const isShared = state.isListShared(item.listId);
+
+      if (isShared) {
+        // For shared lists: Add to itemsInFlight, wait for realtime confirmation
+        set((s) => ({
+          itemsInFlight: new Set(s.itemsInFlight).add(id)
         }));
+
+        // Set timeout to remove from itemsInFlight if realtime doesn't respond
+        const timeoutId = setTimeout(() => {
+          set((s) => {
+            const newSet = new Set(s.itemsInFlight);
+            newSet.delete(id);
+            return { itemsInFlight: newSet };
+          });
+        }, 5000);
+
+        // Update database
+        await db.updateItem(id, updates, userId);
+
+        // Clear timeout when realtime confirms (handler will remove from itemsInFlight)
+        // Note: The realtime handler removes it, so we clear the timeout to avoid double-removal
+        setTimeout(() => clearTimeout(timeoutId), 100);
+      } else {
+        // For non-shared lists: Use optimistic updates (current behavior)
+        set((state) => {
+          const newRecentlyUpdated = new Set(state.recentlyUpdatedItems);
+          newRecentlyUpdated.add(id);
+
+          // Clear this item from recently updated after 20 seconds
+          setTimeout(() => {
+            set((s) => {
+              const updated = new Set(s.recentlyUpdatedItems);
+              updated.delete(id);
+              return { recentlyUpdatedItems: updated };
+            });
+          }, 20000);
+
+          return {
+            items: state.items.map((item) =>
+              item.id === id
+                ? { ...item, ...updates, updatedAt: new Date() } as Item
+                : item
+            ),
+            recentlyUpdatedItems: newRecentlyUpdated
+          };
+        });
+
+        // Then update the database
+        await db.updateItem(id, updates, userId);
+
+        // If the update included a status change for reminders, ensure it's properly calculated
+        if (updates.type === 'reminder' && updates.reminderDate && !updates.status) {
+          const calculatedStatus = calculateReminderStatus(updates.reminderDate);
+          set((state) => ({
+            items: state.items.map((item) =>
+              item.id === id
+                ? { ...item, status: calculatedStatus } as Item
+                : item
+            ),
+          }));
+        }
       }
     } catch (error) {
       console.error('Failed to update item:', error);
+      // Remove from itemsInFlight on error
+      set((s) => {
+        const newSet = new Set(s.itemsInFlight);
+        newSet.delete(id);
+        return { itemsInFlight: newSet };
+      });
       // Revert the optimistic update on error
       await get().loadData(userId);
       set({ error: error instanceof Error ? error.message : 'Failed to update item' });
@@ -679,5 +737,232 @@ export const useStore = create<Store>((set, get) => ({
       .map(result => result.item);
 
     return results;
+  },
+
+  // Helper to check if a list is shared
+  isListShared: (listId) => {
+    const { lists } = get();
+    const list = lists.find(l => l.id === listId);
+    return !!(list?.sharedWith && list.sharedWith.length > 0);
+  },
+
+  // Realtime event handlers
+  handleRealtimeInsert: (table, record) => {
+    const state = get();
+
+    if (table === 'items') {
+      // Convert database record to Item
+      const item = dbItemToItem(record);
+
+      // Check if item belongs to a shared list
+      if (state.isListShared(item.listId)) {
+        // Add item to store if it doesn't exist
+        const exists = state.items.some(i => i.id === item.id);
+        if (!exists) {
+          set({ items: [...state.items, item] });
+        }
+      }
+    } else if (table === 'lists') {
+      // Convert database record to List
+      const list = dbListToList(record);
+
+      // Add list if it doesn't exist
+      const exists = state.lists.some(l => l.id === list.id);
+      if (!exists) {
+        set({ lists: [...state.lists, list] });
+      }
+    }
+  },
+
+  handleRealtimeUpdate: (table, record) => {
+    const state = get();
+
+    if (table === 'items') {
+      const item = dbItemToItem(record);
+
+      // Remove from itemsInFlight (update confirmed)
+      const newItemsInFlight = new Set(state.itemsInFlight);
+      newItemsInFlight.delete(item.id);
+
+      // Update the item in store
+      set({
+        items: state.items.map(i => i.id === item.id ? item : i),
+        itemsInFlight: newItemsInFlight
+      });
+    } else if (table === 'lists') {
+      const list = dbListToList(record);
+
+      set({
+        lists: state.lists.map(l => l.id === list.id ? list : l)
+      });
+    } else if (table === 'notes') {
+      // Note updates require reloading the parent item
+      const itemId = record.item_id;
+      const item = state.items.find(i => i.id === itemId);
+
+      if (item && state.isListShared(item.listId)) {
+        // Reload notes for this item (simplified - could be more granular)
+        const note = dbNoteToNote(record);
+        const updatedNotes = item.notes.map(n => n.id === note.id ? note : n);
+        const noteExists = item.notes.some(n => n.id === note.id);
+
+        // Remove item from itemsInFlight
+        const newItemsInFlight = new Set(state.itemsInFlight);
+        newItemsInFlight.delete(itemId);
+
+        set({
+          items: state.items.map(i =>
+            i.id === itemId
+              ? { ...i, notes: noteExists ? updatedNotes : [...i.notes, note] }
+              : i
+          ),
+          itemsInFlight: newItemsInFlight
+        });
+      }
+    }
+  },
+
+  handleRealtimeDelete: (table, id) => {
+    const state = get();
+
+    if (table === 'items') {
+      // Remove item from store
+      set({
+        items: state.items.filter(i => i.id !== id)
+      });
+    } else if (table === 'lists') {
+      // Remove list from store
+      set({
+        lists: state.lists.filter(l => l.id !== id)
+      });
+
+      // If current list was deleted, switch to 'all'
+      if (state.currentListId === id) {
+        set({ currentListId: 'all' });
+      }
+    } else if (table === 'notes') {
+      // Remove note from its parent item
+      set({
+        items: state.items.map(item => ({
+          ...item,
+          notes: item.notes.filter(n => n.id !== id)
+        }))
+      });
+    }
+  },
+
+  // Set up Realtime subscriptions for shared lists
+  setupRealtimeSubscriptions: () => {
+    // Only set up once
+    if (subscriptionsActive) {
+      console.log('[Realtime] Subscriptions already active, skipping setup');
+      return;
+    }
+
+    const state = get();
+
+    // Get shared list IDs
+    const sharedLists = state.lists.filter(list =>
+      list.sharedWith && list.sharedWith.length > 0
+    );
+    const sharedListIds = sharedLists.map(l => l.id);
+
+    if (sharedListIds.length === 0) {
+      console.log('[Realtime] No shared lists found, skipping subscription setup');
+      return;
+    }
+
+    console.log('[Realtime] Setting up subscriptions for shared lists:', sharedListIds);
+    subscriptionsActive = true;
+
+    // Subscribe to items table changes for shared lists
+    realtimeChannels.items = supabase
+      .channel('shared-items-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'items',
+          filter: `list_id=in.(${sharedListIds.join(',')})`
+        },
+        (payload) => {
+          console.log('[Realtime] Items change:', payload);
+          if (payload.eventType === 'INSERT') {
+            get().handleRealtimeInsert('items', payload.new);
+          } else if (payload.eventType === 'UPDATE') {
+            get().handleRealtimeUpdate('items', payload.new);
+          } else if (payload.eventType === 'DELETE') {
+            get().handleRealtimeDelete('items', payload.old.id);
+          }
+        }
+      )
+      .subscribe();
+
+    // Subscribe to lists table changes (for shared lists being updated/deleted)
+    realtimeChannels.lists = supabase
+      .channel('shared-lists-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'lists',
+          filter: `id=in.(${sharedListIds.join(',')})`
+        },
+        (payload) => {
+          console.log('[Realtime] Lists change:', payload);
+          if (payload.eventType === 'UPDATE') {
+            get().handleRealtimeUpdate('lists', payload.new);
+          } else if (payload.eventType === 'DELETE') {
+            get().handleRealtimeDelete('lists', payload.old.id);
+          }
+        }
+      )
+      .subscribe();
+
+    // Subscribe to notes table changes
+    realtimeChannels.notes = supabase
+      .channel('shared-notes-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notes'
+        },
+        (payload) => {
+          console.log('[Realtime] Notes change:', payload);
+          // Note: We check if the item belongs to a shared list in the handler
+          if (payload.eventType === 'INSERT') {
+            get().handleRealtimeInsert('notes', payload.new);
+          } else if (payload.eventType === 'UPDATE') {
+            get().handleRealtimeUpdate('notes', payload.new);
+          } else if (payload.eventType === 'DELETE') {
+            get().handleRealtimeDelete('notes', payload.old.id);
+          }
+        }
+      )
+      .subscribe();
+  },
+
+  // Clean up Realtime subscriptions
+  cleanupRealtimeSubscriptions: () => {
+    console.log('[Realtime] Cleaning up subscriptions');
+
+    if (realtimeChannels.items) {
+      supabase.removeChannel(realtimeChannels.items);
+      realtimeChannels.items = undefined;
+    }
+    if (realtimeChannels.lists) {
+      supabase.removeChannel(realtimeChannels.lists);
+      realtimeChannels.lists = undefined;
+    }
+    if (realtimeChannels.notes) {
+      supabase.removeChannel(realtimeChannels.notes);
+      realtimeChannels.notes = undefined;
+    }
+
+    subscriptionsActive = false;
   },
 }));

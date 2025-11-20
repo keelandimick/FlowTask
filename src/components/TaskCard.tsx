@@ -1,11 +1,10 @@
 import React from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Item, Priority, ViewMode } from '../types';
+import { Item, Priority } from '../types';
 import { useStoreWithAuth } from '../store/useStoreWithAuth';
 import { format } from 'date-fns';
 import { TaskModal } from './TaskModal';
-import customChrono from '../lib/chronoConfig';
 import { renderTextWithLinks } from '../lib/ai';
 
 interface TaskCardProps {
@@ -25,14 +24,9 @@ const priorityLabels: Record<Priority, string> = {
 };
 
 export const TaskCard: React.FC<TaskCardProps> = ({ item }) => {
-  const { deleteItem, updateItem, currentView, highlightedItemId, lists, items, selectedItemId, setSelectedItem, setCurrentView, setHighlightedItem } = useStoreWithAuth();
+  const { deleteItem, updateItem, currentView, highlightedItemId, lists, selectedItemId, setSelectedItem, setHighlightedItem, itemsInFlight } = useStoreWithAuth();
   const [showEditModal, setShowEditModal] = React.useState(false);
   const [showPriorityOptions, setShowPriorityOptions] = React.useState(false);
-  const [isEditing, setIsEditing] = React.useState(false);
-  const [editTitle, setEditTitle] = React.useState(item.title);
-  const [isNavigating, setIsNavigating] = React.useState(false);
-  const [previewDate, setPreviewDate] = React.useState<Date | null>(null);
-  const [previewRecurrence, setPreviewRecurrence] = React.useState<string | null>(null);
   const isHighlighted = highlightedItemId === item.id;
   const isSelected = selectedItemId === item.id;
   
@@ -51,17 +45,6 @@ export const TaskCard: React.FC<TaskCardProps> = ({ item }) => {
     ? false 
     : mostRecentHoldNote?.content.toLowerCase().startsWith('on hold');
   
-  // Reset editing state when selection changes
-  React.useEffect(() => {
-    if (!isSelected) {
-      setIsEditing(false);
-      setEditTitle(item.title);
-      setPreviewDate(null);
-      setPreviewRecurrence(null);
-    }
-  }, [isSelected, item.title]);
-
-
   // Handle delete key press when selected
   React.useEffect(() => {
     const handleKeyDown = async (e: KeyboardEvent) => {
@@ -74,7 +57,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ item }) => {
       );
       
       // Check for both Delete and Backspace keys
-      if (isSelected && (e.key === 'Delete' || e.key === 'Backspace') && !isEditing && !isTyping && currentView !== 'trash' && currentView !== 'complete') {
+      if (isSelected && (e.key === 'Delete' || e.key === 'Backspace') && !isTyping && currentView !== 'trash' && currentView !== 'complete') {
         e.preventDefault();
         if (window.confirm(`Delete "${item.title}"?`)) {
           try {
@@ -91,7 +74,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ item }) => {
       document.addEventListener('keydown', handleKeyDown);
       return () => document.removeEventListener('keydown', handleKeyDown);
     }
-  }, [isSelected, isEditing, item.title, item.id, deleteItem, currentView]);
+  }, [isSelected, item.title, item.id, deleteItem, currentView]);
   
   // Close priority options on any click
   React.useEffect(() => {
@@ -133,10 +116,12 @@ export const TaskCard: React.FC<TaskCardProps> = ({ item }) => {
     transition,
   };
 
-  const isOverdue = item.type === 'reminder' && 
-    item.reminderDate && 
+  const isOverdue = item.type === 'reminder' &&
+    item.reminderDate &&
     new Date(item.reminderDate) < new Date() &&
     item.status !== 'complete';
+
+  const isInFlight = itemsInFlight.has(item.id);
 
   return (
     <div
@@ -145,13 +130,15 @@ export const TaskCard: React.FC<TaskCardProps> = ({ item }) => {
       className={`group relative ${isDragging ? 'opacity-20' : ''}`}
       data-item-id={item.id}
     >
-      <div 
+      <div
         className={`flex items-center py-2 px-2 ${currentView !== 'trash' && currentView !== 'complete' ? 'cursor-pointer' : ''} border-b border-gray-100 transition-all duration-300 ${
+          isInFlight ? 'opacity-50 pointer-events-none' : ''
+        } ${
           isHighlighted ? 'bg-yellow-100 animate-pulse' : isSelected ? 'bg-gray-100' : 'hover:bg-gray-50'
         }`}
         onClick={(e) => {
           e.stopPropagation();
-          if (currentView !== 'trash' && currentView !== 'complete' && !isEditing) {
+          if (currentView !== 'trash' && currentView !== 'complete') {
             if (selectedItemId === item.id) {
               // Click on already selected item - deselect it
               setSelectedItem(null);
@@ -163,17 +150,20 @@ export const TaskCard: React.FC<TaskCardProps> = ({ item }) => {
             }
           }
         }}
-        onDoubleClick={(e) => {
-          e.stopPropagation();
-          if (currentView !== 'trash' && currentView !== 'complete') {
-            // Double click - enable inline editing without changing selection
-            setIsEditing(true);
-          }
-        }}
       >
-        {/* Drag handle - only show for tasks */}
-        {isDraggable && (
-          <div 
+        {/* Loading spinner - show when item is in flight */}
+        {isInFlight && (
+          <div className="p-0.5">
+            <svg className="w-3.5 h-3.5 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          </div>
+        )}
+
+        {/* Drag handle - only show for tasks when not in flight */}
+        {isDraggable && !isInFlight && (
+          <div
             className="drag-handle p-0.5 cursor-move opacity-0 group-hover:opacity-100 transition-opacity"
             {...attributes}
             {...listeners}
@@ -209,267 +199,16 @@ export const TaskCard: React.FC<TaskCardProps> = ({ item }) => {
               ) : null;
             })()}
             
-            {isEditing ? (
-              <textarea
-                value={editTitle}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setEditTitle(value);
-                  
-                  // Auto-resize textarea
-                  e.target.style.height = '0px';
-                  e.target.style.height = e.target.scrollHeight + 'px';
-                  
-                  // Live preview of dates/recurrence
-                  const recurringMatch = value.match(/\b(every\s+(other\s+)?\d*\s*(day|week|month|year|hours?|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|daily|weekly|monthly|yearly|annually|weekdays?|weekends?)\b/i);
-                  if (recurringMatch) {
-                    setPreviewRecurrence(recurringMatch[0]);
-                    setPreviewDate(null);
-                  } else {
-                    const parsedDate = customChrono.parseDate(value);
-                    if (parsedDate) {
-                      setPreviewDate(parsedDate);
-                      setPreviewRecurrence(null);
-                    } else {
-                      setPreviewDate(null);
-                      setPreviewRecurrence(null);
-                    }
-                  }
-                }}
-                onKeyDown={async (e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    
-                    // Parse for dates and recurring patterns
-                    let finalTitle = editTitle.trim();
-                    let updates: any = { title: finalTitle };
-                    
-                    // Check for recurring patterns first
-                    const recurringMatch = editTitle.match(/\b(every\s+(other\s+)?\d*\s*(day|week|month|year|hours?|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|daily|weekly|monthly|yearly|annually|weekdays?|weekends?)\b/i);
-                    if (recurringMatch) {
-                      // Extract recurrence and clean title
-                      finalTitle = editTitle.replace(recurringMatch[0], '').trim();
-                      if (finalTitle.length > 0) {
-                        finalTitle = finalTitle.charAt(0).toUpperCase() + finalTitle.slice(1);
-                      }
-                      updates.title = finalTitle;
-                      updates.type = 'reminder';
-                      updates.recurrence = {
-                        frequency: 'weekly', // Default, would need pattern matching
-                        time: '09:00',
-                        originalText: recurringMatch[0]
-                      };
-                      updates.status = 'weekly'; // Set status to match frequency
-                    } else {
-                      // Check for single date
-                      const parsedDate = customChrono.parseDate(editTitle);
-                      if (parsedDate) {
-                        const parsedText = customChrono.parse(editTitle)[0].text;
-                        finalTitle = editTitle.replace(parsedText, '').trim();
-                        if (finalTitle.length > 0) {
-                          finalTitle = finalTitle.charAt(0).toUpperCase() + finalTitle.slice(1);
-                        }
-                        updates.title = finalTitle;
-                        updates.type = 'reminder';
-                        updates.reminderDate = parsedDate;
-                        // Calculate and set the appropriate status
-                        const now = new Date();
-                        const reminderDateOnly = new Date(parsedDate.getFullYear(), parsedDate.getMonth(), parsedDate.getDate());
-                        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-                        const diffTime = reminderDateOnly.getTime() - todayStart.getTime();
-                        const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
-                        
-                        if (diffDays < 0) {
-                          updates.status = 'today';
-                        } else if (diffDays === 0) {
-                          updates.status = 'today';
-                        } else if (diffDays <= 7) {
-                          updates.status = 'within7';
-                        } else {
-                          updates.status = '7plus';
-                        }
-                      }
-                    }
-                    
-                    // Skip AI processing - just capitalize first letter
-                    if (finalTitle.length > 0) {
-                      finalTitle = finalTitle.charAt(0).toUpperCase() + finalTitle.slice(1);
-                      updates.title = finalTitle;
-                    }
-                    
-                    // Check for duplicates (case insensitive) in active items only
-                    const normalizedTitle = finalTitle.toLowerCase();
-                    const duplicateExists = items.some(otherItem => 
-                      !otherItem.deletedAt && 
-                      otherItem.status !== 'complete' &&
-                      otherItem.title.toLowerCase() === normalizedTitle &&
-                      otherItem.id !== item.id // Don't check against self
-                    );
-                    
-                    if (duplicateExists) {
-                      alert('A task with this title already exists');
-                      setIsEditing(false);
-                      setEditTitle(item.title); // Reset to original title
-                      return;
-                    }
-                    
-                    try {
-                      await updateItem(item.id, updates);
-                      setIsEditing(false);
-                      
-                      // Navigate to appropriate view if item type changed
-                      if (updates.type === 'reminder') {
-                        let targetView: ViewMode = 'reminders';
-                        if (updates.recurrence) {
-                          targetView = 'recurring';
-                        }
-                        if (targetView !== currentView) {
-                          setIsNavigating(true); // Prevent onBlur from resetting
-                          setCurrentView(targetView);
-                          setHighlightedItem(item.id);
-                        }
-                      }
-                    } catch (error) {
-                      console.error('Failed to update item:', error);
-                    }
-                  } else if (e.key === 'Escape') {
-                    setEditTitle(item.title);
-                    setIsEditing(false);
-                    setPreviewDate(null);
-                    setPreviewRecurrence(null);
-                  }
-                }}
-                onBlur={async () => {
-                  if (!isNavigating) {
-                    // Save changes on blur (same as pressing Enter)
-                    let finalTitle = editTitle.trim();
-                    if (finalTitle && finalTitle !== item.title) {
-                      let updates: any = { title: finalTitle };
-                      
-                      // Check for recurring patterns first
-                      const recurringMatch = editTitle.match(/\b(every\s+(other\s+)?\d*\s*(day|week|month|year|hours?|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|daily|weekly|monthly|yearly|annually|weekdays?|weekends?)\b/i);
-                      if (recurringMatch) {
-                        // Extract recurrence and clean title
-                        finalTitle = editTitle.replace(recurringMatch[0], '').trim();
-                        if (finalTitle.length > 0) {
-                          finalTitle = finalTitle.charAt(0).toUpperCase() + finalTitle.slice(1);
-                        }
-                        updates.title = finalTitle;
-                        updates.type = 'reminder';
-                        updates.recurrence = {
-                          frequency: 'weekly', // Default, would need pattern matching
-                          time: '09:00',
-                          originalText: recurringMatch[0]
-                        };
-                        updates.status = 'weekly'; // Set status to match frequency
-                      } else {
-                        // Check for single date
-                        const parsedDate = customChrono.parseDate(editTitle);
-                        if (parsedDate) {
-                          const parsedText = customChrono.parse(editTitle)[0].text;
-                          finalTitle = editTitle.replace(parsedText, '').trim();
-                          if (finalTitle.length > 0) {
-                            finalTitle = finalTitle.charAt(0).toUpperCase() + finalTitle.slice(1);
-                          }
-                          updates.title = finalTitle;
-                          updates.type = 'reminder';
-                          updates.reminderDate = parsedDate;
-                          // Calculate and set the appropriate status
-                          const now = new Date();
-                          const reminderDateOnly = new Date(parsedDate.getFullYear(), parsedDate.getMonth(), parsedDate.getDate());
-                          const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-                          const diffTime = reminderDateOnly.getTime() - todayStart.getTime();
-                          const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
-                          
-                          if (diffDays < 0) {
-                            updates.status = 'today';
-                          } else if (diffDays === 0) {
-                            updates.status = 'today';
-                          } else if (diffDays <= 7) {
-                            updates.status = 'within7';
-                          } else {
-                            updates.status = '7plus';
-                          }
-                        }
-                      }
-                      
-                      // Skip AI processing - just capitalize first letter
-                      if (finalTitle.length > 0) {
-                        finalTitle = finalTitle.charAt(0).toUpperCase() + finalTitle.slice(1);
-                        updates.title = finalTitle;
-                      }
-                      
-                      // Check for duplicates (case insensitive) in active items only
-                      const normalizedTitle = finalTitle.toLowerCase();
-                      const duplicateExists = items.some(otherItem => 
-                        !otherItem.deletedAt && 
-                        otherItem.status !== 'complete' &&
-                        otherItem.title.toLowerCase() === normalizedTitle &&
-                        otherItem.id !== item.id // Don't check against self
-                      );
-                      
-                      if (duplicateExists) {
-                        alert('A task with this title already exists');
-                        setEditTitle(item.title); // Reset to original title
-                        setIsEditing(false);
-                        return;
-                      }
-                      
-                      try {
-                        await updateItem(item.id, updates);
-                        
-                        // Navigate to appropriate view if item type changed
-                        if (updates.type === 'reminder') {
-                          let targetView: ViewMode = 'reminders';
-                          if (updates.recurrence) {
-                            targetView = 'recurring';
-                          }
-                          if (targetView !== currentView) {
-                            setIsNavigating(true); // Prevent onBlur from resetting
-                            setCurrentView(targetView);
-                            setHighlightedItem(item.id);
-                          }
-                        }
-                      } catch (error) {
-                        console.error('Failed to update item:', error);
-                      }
-                    }
-                    
-                    setIsEditing(false);
-                    setPreviewDate(null);
-                    setPreviewRecurrence(null);
-                  }
-                }}
-                onClick={(e) => e.stopPropagation()}
-                onFocus={(e) => {
-                  // Place cursor at end without selecting text
-                  const target = e.target as HTMLTextAreaElement;
-                  target.setSelectionRange(editTitle.length, editTitle.length);
-                }}
-                className="flex-1 text-[13.5px] bg-transparent border-none outline-none focus:outline-none focus:ring-0 p-0 m-0 resize-none overflow-hidden leading-normal"
-                rows={1}
-                autoFocus
-                spellCheck="true"
-                style={{ lineHeight: 'inherit' }}
-                ref={(textarea) => {
-                  if (textarea) {
-                    textarea.style.height = '0px';
-                    textarea.style.height = textarea.scrollHeight + 'px';
-                  }
-                }}
-              />
-            ) : (
-              <span className={`flex-1 text-[13.5px] ${
-                item.status === 'complete' ? 'line-through text-gray-400' : 'text-gray-800'
-              }`}>
-                {renderTextWithLinks(item.title)}
-                {hasOnHoldNote && (
-                  <span className="ml-2 text-xs font-bold text-red-600 bg-red-100 px-2 py-0.5 rounded">
-                    ON HOLD
-                  </span>
-                )}
-              </span>
-            )}
+            <span className={`flex-1 text-[13.5px] ${
+              item.status === 'complete' ? 'line-through text-gray-400' : 'text-gray-800'
+            }`}>
+              {renderTextWithLinks(item.title)}
+              {hasOnHoldNote && (
+                <span className="ml-2 text-xs font-bold text-red-600 bg-red-100 px-2 py-0.5 rounded">
+                  ON HOLD
+                </span>
+              )}
+            </span>
           </div>
 
           {/* Date/time on second line */}
@@ -505,39 +244,6 @@ export const TaskCard: React.FC<TaskCardProps> = ({ item }) => {
               {item.recurrence.originalText 
                 ? `${item.recurrence.originalText} at ${format(new Date(`2000-01-01T${item.recurrence.time}`), 'h:mm a')}`
                 : `${item.recurrence.frequency} at ${format(new Date(`2000-01-01T${item.recurrence.time}`), 'h:mm a')}`}
-            </div>
-          )}
-
-          {/* Live preview when editing */}
-          {isEditing && previewDate && (() => {
-            const now = new Date();
-            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-            const tomorrow = new Date(today);
-            tomorrow.setDate(tomorrow.getDate() + 1);
-            const previewDateOnly = new Date(previewDate.getFullYear(), previewDate.getMonth(), previewDate.getDate());
-            
-            let dateLabel: string;
-            if (previewDateOnly.getTime() === today.getTime()) {
-              dateLabel = `Today at ${format(previewDate, 'h:mm a')}`;
-            } else if (previewDateOnly.getTime() === tomorrow.getTime()) {
-              dateLabel = `Tomorrow at ${format(previewDate, 'h:mm a')}`;
-            } else {
-              dateLabel = format(previewDate, 'MMM d, h:mm a');
-            }
-            
-            return (
-              <div className="text-[11px] mt-0.5 text-blue-500">
-                → {dateLabel}
-              </div>
-            );
-          })()}
-          
-          {isEditing && previewRecurrence && (
-            <div className="text-[11px] text-blue-500 flex items-center gap-1 mt-0.5">
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              → {previewRecurrence} at 9:00 AM
             </div>
           )}
         </div>

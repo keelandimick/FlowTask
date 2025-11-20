@@ -22,10 +22,38 @@ import { TaskStatus, ReminderStatus } from './types';
 
 function App() {
   const { user, loading } = useAuth();
-  const { updateItem, moveItem, getFilteredItems, currentView, currentListId, setSelectedItem, setHighlightedItem, selectedItemId } = useStoreWithAuth();
+  const { updateItem, moveItem, getFilteredItems, currentView, currentListId, displayMode, setSelectedItem, setHighlightedItem, selectedItemId } = useStoreWithAuth();
   const [activeId, setActiveId] = React.useState<string | null>(null);
   const items = getFilteredItems();
   const notesOpen = !!selectedItemId;
+
+  // Get items in visual order for keyboard navigation
+  const getVisuallyOrderedItems = () => {
+    if (currentView !== 'tasks') {
+      return items; // For reminders/recurring, use default order
+    }
+
+    if (displayMode === 'category') {
+      // Sort by category alphabetically, with uncategorized last
+      return [...items].sort((a, b) => {
+        const catA = a.category || 'zzz_uncategorized';
+        const catB = b.category || 'zzz_uncategorized';
+        if (catA !== catB) return catA.localeCompare(catB);
+        // Within same category, maintain priority order (already sorted)
+        return 0;
+      });
+    } else {
+      // Column mode - sort by status order (start, in-progress, complete)
+      const statusOrder: { [key: string]: number } = { 'start': 0, 'in-progress': 1, 'complete': 2 };
+      return [...items].sort((a, b) => {
+        const orderA = statusOrder[a.status] ?? 999;
+        const orderB = statusOrder[b.status] ?? 999;
+        if (orderA !== orderB) return orderA - orderB;
+        // Within same column, maintain priority order (already sorted)
+        return 0;
+      });
+    }
+  };
   
   // Deselect item when changing views or lists
   React.useEffect(() => {
@@ -60,33 +88,36 @@ function App() {
   React.useEffect(() => {
     const handleArrowKeys = (e: KeyboardEvent) => {
       if (!selectedItemId || currentView === 'trash' || currentView === 'complete') return;
-      
+
       // Check if any input or textarea is currently focused
       const activeElement = document.activeElement;
       const isInputFocused = activeElement && (
-        activeElement.tagName === 'INPUT' || 
+        activeElement.tagName === 'INPUT' ||
         activeElement.tagName === 'TEXTAREA' ||
         activeElement.getAttribute('contenteditable') === 'true'
       );
-      
+
       if (isInputFocused) return;
-      
+
       if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
         e.preventDefault();
-        
-        // Get the current index of selected item
-        const currentIndex = items.findIndex(item => item.id === selectedItemId);
+
+        // Get items in visual order for navigation
+        const visualItems = getVisuallyOrderedItems();
+
+        // Get the current index of selected item in visual order
+        const currentIndex = visualItems.findIndex(item => item.id === selectedItemId);
         if (currentIndex === -1) return;
-        
+
         let newIndex = currentIndex;
         if (e.key === 'ArrowUp') {
           newIndex = Math.max(0, currentIndex - 1);
         } else {
-          newIndex = Math.min(items.length - 1, currentIndex + 1);
+          newIndex = Math.min(visualItems.length - 1, currentIndex + 1);
         }
-        
-        if (newIndex !== currentIndex && items[newIndex]) {
-          setSelectedItem(items[newIndex].id);
+
+        if (newIndex !== currentIndex && visualItems[newIndex]) {
+          setSelectedItem(visualItems[newIndex].id);
           setHighlightedItem(null);
         }
       }
@@ -94,7 +125,7 @@ function App() {
 
     document.addEventListener('keydown', handleArrowKeys);
     return () => document.removeEventListener('keydown', handleArrowKeys);
-  }, [selectedItemId, setSelectedItem, items, currentView]);
+  }, [selectedItemId, setSelectedItem, items, currentView, displayMode]);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
