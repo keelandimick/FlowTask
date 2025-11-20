@@ -229,9 +229,9 @@ const DroppableListItem: React.FC<DroppableListItemProps> = ({ list, isActive, o
             {hasCollaborators ? 'Manage Collaborators' : 'Share'} "{list.name}"
           </h3>
           <p className="text-sm text-gray-600 mb-4">
-            {hasCollaborators 
-              ? 'Add or remove collaborators (separate emails with commas)' 
-              : 'Enter email addresses separated by commas'}
+            {hasCollaborators
+              ? 'Add or remove collaborators (separate emails with commas). Collaborators can edit items and work together in real-time.'
+              : 'Enter email addresses separated by commas. Collaborators will be able to edit items and work together in real-time.'}
           </p>
           <textarea
             value={collaboratorEmails}
@@ -588,11 +588,11 @@ export const Sidebar: React.FC = () => {
                   if (currentView === 'trash' || currentView === 'complete') setCurrentView('tasks');
                 }}
                 onDelete={list.id !== 'default' ? async () => {
-                  const listTasks = items.filter(item => item.listId === list.id);
+                  const listTasks = items.filter(item => item.listId === list.id && !item.deletedAt && item.status !== 'complete');
                   const message = listTasks.length > 0
                     ? `Delete list "${list.name}" and its ${listTasks.length} items?`
                     : `Delete list "${list.name}"?`;
-                  
+
                   if (window.confirm(message)) {
                     try {
                       await deleteList(list.id);
@@ -621,11 +621,11 @@ export const Sidebar: React.FC = () => {
                       if (currentView === 'trash' || currentView === 'complete') setCurrentView('tasks');
                     }}
                     onDelete={list.id !== 'default' ? async () => {
-                      const listTasks = items.filter(item => item.listId === list.id);
+                      const listTasks = items.filter(item => item.listId === list.id && !item.deletedAt && item.status !== 'complete');
                       const message = listTasks.length > 0
                         ? `Delete list "${list.name}" and its ${listTasks.length} items?`
                         : `Delete list "${list.name}"?`;
-                      
+
                       if (window.confirm(message)) {
                         try {
                           await deleteList(list.id);

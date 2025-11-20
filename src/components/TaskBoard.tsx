@@ -210,106 +210,104 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ activeId, notesOpen }) => 
         }}
       >
         {/* View tabs */}
-        {currentView !== 'trash' && (
-          <div className="px-6 pt-4">
-            <div className="flex justify-between items-center border-b border-gray-200">
-              <div className="flex">
-              <button
-                onClick={() => setCurrentView('tasks')}
-                className={`px-4 py-2 border-b-2 -mb-px transition-all ${
-                  currentView === 'tasks'
-                    ? 'border-black text-black font-bold'
-                    : 'border-transparent text-gray-500 font-medium hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                📋 Tasks <span className="text-xs text-gray-400">({allItems.filter(item => 
-                  !item.deletedAt && 
-                  item.type === 'task' && 
-                  item.status !== 'complete' &&
-                  (currentListId === 'all' || item.listId === currentListId)
-                ).length})</span>
-              </button>
-              <button
-                onClick={() => setCurrentView('reminders')}
-                className={`px-4 py-2 border-b-2 -mb-px transition-all ${
-                  currentView === 'reminders'
-                    ? 'border-black text-black font-bold'
-                    : 'border-transparent text-gray-500 font-medium hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                🔔 Reminders <span className="text-xs text-gray-400">({allItems.filter(item => 
-                  !item.deletedAt && 
-                  item.type === 'reminder' && 
-                  !item.recurrence &&
-                  item.status !== 'complete' &&
-                  (currentListId === 'all' || item.listId === currentListId)
-                ).length})</span>
-              </button>
-              <button
-                onClick={() => setCurrentView('recurring')}
-                className={`px-4 py-2 border-b-2 -mb-px transition-all ${
-                  currentView === 'recurring'
-                    ? 'border-black text-black font-bold'
-                    : 'border-transparent text-gray-500 font-medium hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                🔁 Recurring <span className="text-xs text-gray-400">({allItems.filter(item => 
-                  !item.deletedAt && 
-                  item.type === 'reminder' && 
-                  item.recurrence &&
-                  item.status !== 'complete' &&
-                  (currentListId === 'all' || item.listId === currentListId)
-                ).length})</span>
-              </button>
-              </div>
+        <div className="px-6 pt-4">
+          <div className="flex justify-between items-center border-b border-gray-200">
+            <div className="flex">
+            <button
+              onClick={() => setCurrentView('tasks')}
+              className={`px-4 py-2 border-b-2 -mb-px transition-all ${
+                currentView === 'tasks'
+                  ? 'border-black text-black font-bold'
+                  : 'border-transparent text-gray-500 font-medium hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              📋 Tasks <span className="text-xs text-gray-400">({allItems.filter(item =>
+                !item.deletedAt &&
+                item.type === 'task' &&
+                item.status !== 'complete' &&
+                (currentListId === 'all' || item.listId === currentListId)
+              ).length})</span>
+            </button>
+            <button
+              onClick={() => setCurrentView('reminders')}
+              className={`px-4 py-2 border-b-2 -mb-px transition-all ${
+                currentView === 'reminders'
+                  ? 'border-black text-black font-bold'
+                  : 'border-transparent text-gray-500 font-medium hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              🔔 Reminders <span className="text-xs text-gray-400">({allItems.filter(item =>
+                !item.deletedAt &&
+                item.type === 'reminder' &&
+                !item.recurrence &&
+                item.status !== 'complete' &&
+                (currentListId === 'all' || item.listId === currentListId)
+              ).length})</span>
+            </button>
+            <button
+              onClick={() => setCurrentView('recurring')}
+              className={`px-4 py-2 border-b-2 -mb-px transition-all ${
+                currentView === 'recurring'
+                  ? 'border-black text-black font-bold'
+                  : 'border-transparent text-gray-500 font-medium hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              🔁 Recurring <span className="text-xs text-gray-400">({allItems.filter(item =>
+                !item.deletedAt &&
+                item.type === 'reminder' &&
+                item.recurrence &&
+                item.status !== 'complete' &&
+                (currentListId === 'all' || item.listId === currentListId)
+              ).length})</span>
+            </button>
+            </div>
 
-              {/* Search, User info and dark mode toggle */}
-              <div className="flex items-center gap-3 pb-2">
-                <SearchBar onResultClick={handleSearchResultClick} />
+            {/* Search, User info and dark mode toggle */}
+            <div className="flex items-center gap-3 pb-2">
+              <SearchBar onResultClick={handleSearchResultClick} />
 
-                <div className="relative user-menu-container">
-                  <button
-                    onClick={() => setShowUserMenu(!showUserMenu)}
-                    className="text-sm text-gray-600 hover:text-gray-800 transition-colors"
-                  >
-                    {user?.email}
-                  </button>
-                  
-                  {showUserMenu && (
-                    <div className="absolute right-0 top-6 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-50">
-                      <button
-                        onClick={async () => {
-                          if (window.confirm('Are you sure you want to sign out?')) {
-                            await signOut();
-                          }
-                        }}
-                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
-                      >
-                        Sign Out
-                      </button>
-                    </div>
-                  )}
-                </div>
-                
+              <div className="relative user-menu-container">
                 <button
-                  onClick={() => setDarkMode(!darkMode)}
-                  className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
-                  title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+                  onClick={() => setShowUserMenu(!showUserMenu)}
+                  className="text-sm text-gray-600 hover:text-gray-800 transition-colors"
                 >
-                  {darkMode ? (
-                    <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                    </svg>
-                  ) : (
-                    <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                    </svg>
-                  )}
+                  {user?.email}
                 </button>
+
+                {showUserMenu && (
+                  <div className="absolute right-0 top-6 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-50">
+                    <button
+                      onClick={async () => {
+                        if (window.confirm('Are you sure you want to sign out?')) {
+                          await signOut();
+                        }
+                      }}
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                    >
+                      Sign Out
+                    </button>
+                  </div>
+                )}
               </div>
+
+              <button
+                onClick={() => setDarkMode(!darkMode)}
+                className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+                title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+              >
+                {darkMode ? (
+                  <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                  </svg>
+                ) : (
+                  <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                  </svg>
+                )}
+              </button>
             </div>
           </div>
-        )}
+        </div>
         
         {/* Title header with inline toggle */}
         <div className="px-6 pt-2 pb-2 flex items-center justify-center gap-4">
@@ -427,11 +425,9 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ activeId, notesOpen }) => 
               )}
             </div>
           )}
-        </div>
-        
-        {/* Header buttons */}
-        <div className="flex justify-end px-6 pb-2">
-          {currentView === 'trash' ? (
+
+          {/* Empty Trash button - inline with title, only for Trash view */}
+          {currentView === 'trash' && (
             <button
               onClick={async () => {
                 if (window.confirm('Empty trash? This will permanently delete all items in trash.')) {
@@ -450,7 +446,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ activeId, notesOpen }) => 
               </svg>
               Empty Trash
             </button>
-          ) : null}
+          )}
         </div>
 
         <div className="flex gap-4 p-6 pt-3 flex-1 overflow-auto">
