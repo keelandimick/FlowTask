@@ -11,9 +11,10 @@ import { categorizeItems } from '../lib/ai';
 interface TaskBoardProps {
   activeId: string | null;
   notesOpen: boolean;
+  onMobileBack: () => void;
 }
 
-export const TaskBoard: React.FC<TaskBoardProps> = ({ activeId, notesOpen }) => {
+export const TaskBoard: React.FC<TaskBoardProps> = ({ activeId, notesOpen, onMobileBack }) => {
   const {
     currentView,
     setCurrentView,
@@ -207,12 +208,12 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ activeId, notesOpen }) => 
 
   return (
     <>
-      <div 
+      <div
         className="flex flex-col h-full"
         onClick={(e) => {
           // Only deselect if clicking on the actual background
           const target = e.target as HTMLElement;
-          if (target === e.currentTarget || 
+          if (target === e.currentTarget ||
               target.classList.contains('flex-1') ||
               target.classList.contains('gap-4') ||
               target.classList.contains('p-6')) {
@@ -220,8 +221,21 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ activeId, notesOpen }) => 
           }
         }}
       >
+        {/* Mobile back button */}
+        <div className="md:hidden px-4 pt-3 pb-2">
+          <button
+            onClick={onMobileBack}
+            className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            <span className="font-medium">Lists</span>
+          </button>
+        </div>
+
         {/* View tabs */}
-        <div className="px-6 pt-4">
+        <div className="px-6 pt-4 md:pt-4">
           <div className="flex justify-between items-center border-b border-gray-200">
             <div className="flex">
             <button
@@ -342,7 +356,8 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ activeId, notesOpen }) => 
                 // Check if there are any uncategorized items
                 const hasUncategorized = items.some(item =>
                   item.type === 'task' &&
-                  (!item.category || item.category === 'Uncategorized')
+                  (!item.category || item.category === 'Uncategorized') &&
+                  item.status !== 'complete'
                 );
 
                 if (!hasUncategorized) return null;
@@ -466,12 +481,95 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ activeId, notesOpen }) => 
           )}
         </div>
 
-        <div className="flex gap-4 p-6 pt-3 flex-1 overflow-auto">
-          {displayMode === 'category' && (currentView === 'tasks' || currentView === 'reminders' || currentView === 'recurring') ? (
-            <>
-              {/* Single column category view with sub-headers */}
-              <div className="flex-1 flex flex-col gap-3 overflow-auto">
-                {getCategoryColumns().map(category => {
+        {/* On mobile, when notes are open, show only notes */}
+        {notesOpen ? (
+          <div className="flex gap-4 p-6 pt-3 flex-1 overflow-auto">
+            {/* On mobile, hide columns when notes are open */}
+            <div className="hidden md:flex flex-1 gap-4">
+              {displayMode === 'category' && (currentView === 'tasks' || currentView === 'reminders' || currentView === 'recurring') ? (
+                <div className="flex-1 flex flex-col gap-3 overflow-auto">
+                  {getCategoryColumns().map(category => {
+                    let categoryItems: typeof items;
+
+                    if (currentView === 'tasks') {
+                      // For tasks: filter by category property
+                      categoryItems = category.id === 'uncategorized'
+                        ? items.filter(item => item.type === 'task' && !item.category && item.status !== 'complete')
+                        : items.filter(item => item.type === 'task' && item.category === category.id && item.status !== 'complete');
+                    } else if (currentView === 'reminders') {
+                      // For reminders: filter by status (which matches category.id)
+                      categoryItems = items.filter(item =>
+                        item.type === 'reminder' &&
+                        !item.recurrence &&
+                        item.status === category.id
+                      );
+                    } else if (currentView === 'recurring') {
+                      // For recurring: filter by recurrence frequency (which matches category.id)
+                      categoryItems = items.filter(item =>
+                        item.type === 'reminder' &&
+                        item.recurrence &&
+                        item.recurrence.frequency === category.id
+                      );
+                    } else {
+                      categoryItems = [];
+                    }
+
+                    if (categoryItems.length === 0) return null;
+
+                    return (
+                      <div key={category.id}>
+                        {/* Category sub-header */}
+                        <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide mb-2 px-2">
+                          {category.title}
+                        </h3>
+                        {/* Items in this category */}
+                        <div>
+                          {categoryItems.map(item => (
+                            <TaskCard key={item.id} item={item} />
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <>
+                  {/* Standard column view */}
+                  {columns.map((column, index) => (
+                    <React.Fragment key={column.id}>
+                      <TaskColumn
+                        title={column.title}
+                        columnId={column.id}
+                        items={
+                          currentView === 'trash'
+                            ? items
+                            : items.filter(item => item.status === column.id)
+                        }
+                      />
+                      {index < columns.length - 1 && (
+                        <div className="w-px bg-gray-200" />
+                      )}
+                    </React.Fragment>
+                  ))}
+                </>
+              )}
+            </div>
+
+            {/* Divider between columns and notes - only on desktop */}
+            <div className="hidden md:block w-px bg-gray-200" />
+
+            {/* Notes panel - full width on mobile, normal width on desktop */}
+            <div className="flex-1 md:flex-1">
+              <Notes isOpen={true} onMobileBack={() => setSelectedItem(null)} />
+            </div>
+          </div>
+        ) : (
+          <div className="flex gap-4 p-6 pt-3 flex-1 overflow-auto">
+            {displayMode === 'category' && (currentView === 'tasks' || currentView === 'reminders' || currentView === 'recurring') ? (
+              <>
+                {/* Single column category view with sub-headers */}
+                <div className="flex-1 flex flex-col gap-3 overflow-auto">
+                  {getCategoryColumns().map(category => {
                   let categoryItems: typeof items;
 
                   if (currentView === 'tasks') {
@@ -515,12 +613,6 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ activeId, notesOpen }) => 
                   );
                 })}
               </div>
-              {notesOpen && (
-                <>
-                  <div className="w-px bg-gray-200" />
-                  <Notes isOpen={true} />
-                </>
-              )}
             </>
           ) : (
             <>
@@ -536,17 +628,15 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ activeId, notesOpen }) => 
                         : items.filter(item => item.status === column.id)
                     }
                   />
-                  {(index < columns.length - 1 || notesOpen) && (
+                  {index < columns.length - 1 && (
                     <div className="w-px bg-gray-200" />
                   )}
                 </React.Fragment>
               ))}
-              {notesOpen && (
-                <Notes isOpen={true} />
-              )}
             </>
           )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Re-categorization Progress Modal */}

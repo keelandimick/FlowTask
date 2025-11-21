@@ -20,10 +20,13 @@ import { useStoreWithAuth } from './store/useStoreWithAuth';
 import { useAuth } from './contexts/AuthContext';
 import { TaskStatus, ReminderStatus } from './types';
 
+type MobilePanel = 'sidebar' | 'taskboard' | 'notes';
+
 function App() {
   const { user, loading } = useAuth();
   const { updateItem, moveItem, getFilteredItems, currentView, currentListId, displayMode, setSelectedItem, setHighlightedItem, selectedItemId } = useStoreWithAuth();
   const [activeId, setActiveId] = React.useState<string | null>(null);
+  const [mobilePanel, setMobilePanel] = React.useState<MobilePanel>('sidebar');
   const items = getFilteredItems();
   const notesOpen = !!selectedItemId;
 
@@ -60,6 +63,27 @@ function App() {
     setSelectedItem(null);
     setHighlightedItem(null);
   }, [currentView, currentListId, setSelectedItem, setHighlightedItem]);
+
+  // Mobile navigation: When a list is selected, show taskboard
+  React.useEffect(() => {
+    if (currentListId) {
+      setMobilePanel('taskboard');
+    }
+  }, [currentListId]);
+
+  // Mobile navigation: When a task is selected (notes open), show notes panel
+  React.useEffect(() => {
+    if (selectedItemId) {
+      setMobilePanel('notes');
+    }
+  }, [selectedItemId]);
+
+  // Mobile navigation: When notes close, go back to taskboard
+  React.useEffect(() => {
+    if (!selectedItemId && mobilePanel === 'notes') {
+      setMobilePanel('taskboard');
+    }
+  }, [selectedItemId, mobilePanel]);
 
   // Handle escape key to close notes when input is not focused
   React.useEffect(() => {
@@ -256,12 +280,21 @@ function App() {
       onDragEnd={handleDragEnd}
     >
       <div className="flex h-screen bg-white">
-        <Sidebar />
-        <main className="flex-1 overflow-hidden">
-          <TaskBoard activeId={activeId} notesOpen={notesOpen} />
+        {/* Sidebar: Hidden on mobile when not on 'sidebar' panel, always visible on desktop */}
+        <div className={`${mobilePanel === 'sidebar' ? 'block' : 'hidden'} md:block`}>
+          <Sidebar />
+        </div>
+
+        {/* TaskBoard: Hidden on mobile when not on 'taskboard' panel, always visible on desktop */}
+        <main className={`flex-1 overflow-hidden ${mobilePanel === 'taskboard' ? 'block' : 'hidden'} md:block`}>
+          <TaskBoard
+            activeId={activeId}
+            notesOpen={notesOpen}
+            onMobileBack={() => setMobilePanel('sidebar')}
+          />
         </main>
       </div>
-      
+
       <DragOverlay dropAnimation={null}>
         {activeItem ? <TaskCard item={activeItem} /> : null}
       </DragOverlay>

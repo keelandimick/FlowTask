@@ -26,6 +26,7 @@ Fix realtime syncing between users and devices
 ## Future Features
 
 ### User Experience
+- [ ] First-time user tutorial/onboarding (with library like React Joyride or Driver.js)
 - [ ] Multiple task selection with shift/cmd click
 - [ ] Bulk operations (delete, move, complete)
 - [ ] Task templates
