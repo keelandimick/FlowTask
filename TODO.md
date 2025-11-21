@@ -2,25 +2,26 @@
 
 ## Priority Tasks
 
-### 1. Dark Mode Implementation
-Implement full dark mode theme with toggle functionality
-- Add dark mode styles across all components
-- Persist dark mode preference
-- Update theme-color meta tag dynamically
-
-### 2. PWA Push Notifications
+### 1. PWA Push Notifications
 Enable push notifications for desktop and mobile
 - Desktop push notifications via Web Push API
 - Service Worker for background notifications
 - PWA support for home screen installation
 - Notification permissions UI
 
-### 3. File Attachments
+### 2. File Attachments
 Implement file attachment directly to items
 - Allow users to attach files to tasks/reminders
 - Display attached files in Notes section
 - Support common file types (images, PDFs, documents)
 - Store files in cloud storage (Firebase Storage)
+
+### 3. Fix Subscription/Shared Lists
+Fix realtime syncing between users and devices
+- Shared lists not syncing properly between users
+- Investigate and fix Firebase realtime subscription issues
+- Ensure changes propagate correctly across all connected clients
+- Test multi-user collaboration scenarios
 
 ## Future Features
 
