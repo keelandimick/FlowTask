@@ -26,22 +26,12 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, mode, edi
   } = useStoreWithAuth();
 
   const [title, setTitle] = useState('');
-  const [priority, setPriority] = useState<Priority>('low');
-  const [dueDate, setDueDate] = useState('');
-  const [dueTime, setDueTime] = useState('');
-  const [isRecurring, setIsRecurring] = useState(false);
-  const [recurrenceFrequency, setRecurrenceFrequency] = useState<RecurrenceFrequency>('daily');
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Reset form when modal closes
   useEffect(() => {
     if (!isOpen) {
       setTitle('');
-      setPriority('low');
-      setDueDate('');
-      setDueTime('');
-      setIsRecurring(false);
-      setRecurrenceFrequency('daily');
     }
   }, [isOpen]);
 
@@ -63,7 +53,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, mode, edi
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose, title, priority, dueDate, dueTime, isRecurring, recurrenceFrequency, defaultColumn, currentListId, currentView]);
+  }, [isOpen, onClose, title, defaultColumn, currentListId, currentView]);
 
   if (!isOpen) return null;
 
@@ -86,64 +76,75 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, mode, edi
     
     setIsProcessing(true);
 
-    // Try to extract date and recurring patterns from title if no date is set
+    // Extract date and recurring patterns from title automatically
     let extractedTitle = title.trim();
     let extractedDate: Date | undefined;
     let detectedRecurrence: { frequency: RecurrenceFrequency; time: string; originalText?: string } | undefined;
-    
-    // First, check for dates and recurring patterns
-    if (!dueDate && !isRecurring) {
-      // Check for recurring patterns first
-      const recurringPatterns = [
-        { pattern: /\b(every\s+day|daily)\b/i, frequency: 'daily' as RecurrenceFrequency },
-        { pattern: /\b(every\s+week|weekly)\b/i, frequency: 'weekly' as RecurrenceFrequency },
-        { pattern: /\b(every\s+month|monthly)\b/i, frequency: 'monthly' as RecurrenceFrequency },
-        { pattern: /\b(every\s+year|yearly|annually)\b/i, frequency: 'yearly' as RecurrenceFrequency },
-        { pattern: /\bevery\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i, frequency: 'weekly' as RecurrenceFrequency },
-        // Additional patterns - best effort basis
-        { pattern: /\bevery\s+\d+\s+hours?\b/i, frequency: 'daily' as RecurrenceFrequency }, // "every 3 hours" -> daily
-        { pattern: /\bevery\s+(other|2nd|second)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i, frequency: 'weekly' as RecurrenceFrequency }, // "every other tuesday" -> weekly
-        { pattern: /\b(weekdays|every\s+weekday)\b/i, frequency: 'daily' as RecurrenceFrequency }, // "weekdays" -> daily
-        { pattern: /\b(weekends|every\s+weekend)\b/i, frequency: 'weekly' as RecurrenceFrequency } // "weekends" -> weekly
-      ];
 
-      for (const { pattern, frequency } of recurringPatterns) {
-        const match = title.match(pattern);
-        if (match) {
-          detectedRecurrence = { 
-            frequency, 
-            time: '09:00',
-            originalText: match[0] // Store the original pattern text
-          };
-          extractedTitle = title.replace(match[0], '').trim();
-          // Re-capitalize if needed after removing recurring pattern
-          if (extractedTitle.length > 0) {
-            extractedTitle = extractedTitle.charAt(0).toUpperCase() + extractedTitle.slice(1);
-          }
-          
-          // Try to parse time from the title
-          const timeMatch = title.match(/\b(at\s+)?(\d{1,2}(:\d{2})?\s*(am|pm)?|\d{1,2}:\d{2})\b/i);
-          if (timeMatch && detectedRecurrence) {
-            const parsedTime = customChrono.parseDate(timeMatch[0]);
-            if (parsedTime) {
-              detectedRecurrence.time = format(parsedTime, 'HH:mm');
-            }
-          }
-          break;
+    // Check for recurring patterns first
+    const recurringPatterns = [
+      { pattern: /\b(every\s+day|daily)\b/i, frequency: 'daily' as RecurrenceFrequency },
+      { pattern: /\b(every\s+week|weekly)\b/i, frequency: 'weekly' as RecurrenceFrequency },
+      { pattern: /\b(every\s+month|monthly)\b/i, frequency: 'monthly' as RecurrenceFrequency },
+      { pattern: /\b(every\s+year|yearly|annually)\b/i, frequency: 'yearly' as RecurrenceFrequency },
+      { pattern: /\bevery\s+(mon(day)?|tue(sday)?|wed(nesday)?|thu(rsday)?|fri(day)?|sat(urday)?|sun(day)?)\b/i, frequency: 'weekly' as RecurrenceFrequency },
+      // Additional patterns - best effort basis
+      { pattern: /\bevery\s+\d+\s+hours?\b/i, frequency: 'daily' as RecurrenceFrequency }, // "every 3 hours" -> daily
+      { pattern: /\bevery\s+(other|2nd|second)\s+(mon(day)?|tue(sday)?|wed(nesday)?|thu(rsday)?|fri(day)?|sat(urday)?|sun(day)?)\b/i, frequency: 'weekly' as RecurrenceFrequency }, // "every other tuesday" -> weekly
+      { pattern: /\b(weekdays|every\s+weekday)\b/i, frequency: 'daily' as RecurrenceFrequency }, // "weekdays" -> daily
+      { pattern: /\b(weekends|every\s+weekend)\b/i, frequency: 'weekly' as RecurrenceFrequency } // "weekends" -> weekly
+    ];
+
+    for (const { pattern, frequency } of recurringPatterns) {
+      const match = title.match(pattern);
+      if (match) {
+        detectedRecurrence = {
+          frequency,
+          time: '09:00',
+          originalText: match[0] // Store the original pattern text
+        };
+        extractedTitle = title.replace(match[0], '').trim();
+        // Re-capitalize if needed after removing recurring pattern
+        if (extractedTitle.length > 0) {
+          extractedTitle = extractedTitle.charAt(0).toUpperCase() + extractedTitle.slice(1);
         }
-      }
 
-      // If no recurring pattern found, try to extract a single date
-      if (!detectedRecurrence) {
-        const parsedFromTitle = customChrono.parse(title.trim());
-        if (parsedFromTitle.length > 0) {
-          extractedDate = parsedFromTitle[0].start.date();
-          // Remove the date text from the title
-          extractedTitle = title.replace(parsedFromTitle[0].text, '').trim();
-          // Re-capitalize if needed after removing date text
+        // Try to parse time from the title
+        const timeMatch = title.match(/\b(at\s+)?(\d{1,2})(:\d{2})?\s*(am|pm|AM|PM)?\b/i);
+        if (timeMatch && timeMatch[2] && detectedRecurrence) {
+          let hours = parseInt(timeMatch[2], 10);
+          const minutes = timeMatch[3] ? parseInt(timeMatch[3].slice(1), 10) : 0;
+
+          if (timeMatch[4]) {
+            const isPM = timeMatch[4].toLowerCase() === 'pm';
+            if (isPM && hours !== 12) hours += 12;
+            if (!isPM && hours === 12) hours = 0;
+          } else if (hours >= 1 && hours <= 11) {
+            hours += 12; // Default to PM for common reminder times
+          }
+
+          detectedRecurrence.time = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+
+          // Strip the time from the title (like reminders do)
+          extractedTitle = extractedTitle.replace(timeMatch[0], '').trim();
           if (extractedTitle.length > 0) {
             extractedTitle = extractedTitle.charAt(0).toUpperCase() + extractedTitle.slice(1);
           }
+        }
+        break;
+      }
+    }
+
+    // If no recurring pattern found, try to extract a single date
+    if (!detectedRecurrence) {
+      const parsedFromTitle = customChrono.parse(title.trim());
+      if (parsedFromTitle.length > 0) {
+        extractedDate = parsedFromTitle[0].start.date();
+        // Remove the date text from the title
+        extractedTitle = title.replace(parsedFromTitle[0].text, '').trim();
+        // Re-capitalize if needed after removing date text
+        if (extractedTitle.length > 0) {
+          extractedTitle = extractedTitle.charAt(0).toUpperCase() + extractedTitle.slice(1);
         }
       }
     }
@@ -164,20 +165,12 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, mode, edi
       }
     }
 
-    const hasDate = dueDate || isRecurring || extractedDate || detectedRecurrence;
+    const hasDate = extractedDate || detectedRecurrence;
     const itemType = hasDate ? 'reminder' : 'task';
 
-    let reminderDate: Date | undefined;
-    if (dueDate) {
-      reminderDate = new Date(`${dueDate}T${dueTime || '09:00'}`);
-    } else if (extractedDate && !detectedRecurrence) {
-      reminderDate = extractedDate;
-    }
+    const reminderDate = extractedDate && !detectedRecurrence ? extractedDate : undefined;
 
-    const recurrence = isRecurring ? {
-      frequency: recurrenceFrequency,
-      time: dueTime || '09:00',
-    } : detectedRecurrence ? {
+    const recurrence = detectedRecurrence ? {
       frequency: detectedRecurrence.frequency,
       time: detectedRecurrence.time,
       originalText: detectedRecurrence.originalText
@@ -269,19 +262,82 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, mode, edi
               autoFocus
               spellCheck="true"
             />
-            {mode === 'create' && !dueDate && !isRecurring && (() => {
+            {mode === 'create' && (() => {
               // Check for recurring patterns
-              const recurringMatch = title.match(/\b(every\s+(day|week|month|year|\d+\s+hours?|other\s+\w+|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|daily|weekly|monthly|yearly|annually|weekdays?|weekends?)\b/i);
+              const recurringMatch = title.match(/\b(every\s+(other\s+)?\d*\s*(day|week|month|year|hours?|mon(day)?|tue(sday)?|wed(nesday)?|thu(rsday)?|fri(day)?|sat(urday)?|sun(day)?)|daily|weekly|monthly|yearly|annually|weekdays?|weekends?)\b/i);
               if (recurringMatch) {
+                // Format the recurring pattern nicely
+                let patternText = recurringMatch[0].toLowerCase();
+
+                // Expand day abbreviations
+                const dayMap: Record<string, string> = {
+                  'mon': 'Monday', 'monday': 'Monday',
+                  'tue': 'Tuesday', 'tuesday': 'Tuesday',
+                  'wed': 'Wednesday', 'wednesday': 'Wednesday',
+                  'thu': 'Thursday', 'thursday': 'Thursday',
+                  'fri': 'Friday', 'friday': 'Friday',
+                  'sat': 'Saturday', 'saturday': 'Saturday',
+                  'sun': 'Sunday', 'sunday': 'Sunday'
+                };
+
+                // Replace abbreviated days with full names
+                Object.entries(dayMap).forEach(([abbr, full]) => {
+                  const regex = new RegExp(`\\b${abbr}\\b`, 'i');
+                  if (regex.test(patternText)) {
+                    patternText = patternText.replace(regex, full);
+                  }
+                });
+
+                // Capitalize first letter
+                let displayText = patternText.charAt(0).toUpperCase() + patternText.slice(1);
+
+                // Parse time (with or without AM/PM)
+                const timeMatch = title.match(/\b(at\s+)?(\d{1,2})(:\d{2})?\s*(am|pm|AM|PM)?\b/i);
+                if (timeMatch && timeMatch[2]) {
+                  let hours = parseInt(timeMatch[2], 10);
+                  const minutes = timeMatch[3] ? parseInt(timeMatch[3].slice(1), 10) : 0;
+
+                  // Parse AM/PM or use smart defaults
+                  if (timeMatch[4]) {
+                    const isPM = timeMatch[4].toLowerCase() === 'pm';
+                    if (isPM && hours !== 12) hours += 12;
+                    if (!isPM && hours === 12) hours = 0;
+                  } else if (hours >= 1 && hours <= 11) {
+                    hours += 12; // Default to PM
+                  }
+
+                  // Format time nicely
+                  const period = hours >= 12 ? 'PM' : 'AM';
+                  const displayHours = hours > 12 ? hours - 12 : (hours === 0 ? 12 : hours);
+                  const formattedTime = `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
+
+                  displayText += ` at ${formattedTime}`;
+                }
+
                 return (
                   <div className="text-xs text-gray-500 mt-1">
-                    Recurring pattern detected: {recurringMatch[0]}
+                    Recurring pattern detected: {displayText}
                   </div>
                 );
               }
-              
-              // Check for single date
-              const parsed = customChrono.parse(title);
+
+              // Check for single date (expand number words first for "at three" etc.)
+              const expandNumberWords = (text: string) => {
+                const numberWords: Record<string, string> = {
+                  'one': '1', 'two': '2', 'three': '3', 'four': '4', 'five': '5',
+                  'six': '6', 'seven': '7', 'eight': '8', 'nine': '9', 'ten': '10',
+                  'eleven': '11', 'twelve': '12'
+                };
+                let result = text;
+                Object.entries(numberWords).forEach(([word, number]) => {
+                  const regex = new RegExp(`\\b${word}\\b`, 'gi');
+                  result = result.replace(regex, number);
+                });
+                return result;
+              };
+
+              const expandedTitle = expandNumberWords(title);
+              const parsed = customChrono.parse(expandedTitle);
               if (parsed.length > 0) {
                 return (
                   <div className="text-xs text-gray-500 mt-1">

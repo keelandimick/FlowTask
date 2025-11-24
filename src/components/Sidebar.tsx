@@ -75,18 +75,24 @@ const DroppableListItem: React.FC<DroppableListItemProps> = ({ list, isActive, o
         onClick={onSelect}
         className="flex items-center flex-1 cursor-pointer"
       >
-        {/* Color picker */}
+        {/* Color indicator or icon for "All Lists" */}
         <div className={`relative color-picker-${list.id}`}>
-          <div
-            className="w-3 h-3 rounded-full mr-2 cursor-pointer hover:ring-2 hover:ring-gray-300 flex-shrink-0"
-            style={{ backgroundColor: list.color }}
-            onClick={(e) => {
-              if (!isAllList) {
+          {isAllList ? (
+            // Inbox icon for "All Lists"
+            <svg className="w-4 h-4 mr-2 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+            </svg>
+          ) : (
+            // Color picker for regular lists
+            <div
+              className="w-3 h-3 rounded-full mr-2 cursor-pointer hover:ring-2 hover:ring-gray-300 flex-shrink-0"
+              style={{ backgroundColor: list.color }}
+              onClick={(e) => {
                 e.stopPropagation();
                 setShowColorPicker(!showColorPicker);
-              }
-            }}
-          />
+              }}
+            />
+          )}
           {showColorPicker && (
             <div className="absolute left-0 top-5 bg-white border border-gray-200 rounded-lg shadow-lg p-4 z-50 w-64">
               <div className="grid grid-cols-4 gap-3">
@@ -532,8 +538,37 @@ export const Sidebar: React.FC = () => {
       <div className="mx-4 border-b border-gray-200"></div>
 
       <div className="px-4 pt-4 pb-4">
+          {/* All Lists - Separate section like iOS */}
+          {showAllList && (
+            <>
+              <div className="mb-4">
+                <div className="space-y-1">
+                  <DroppableListItem
+                    key="all"
+                    list={{
+                      id: 'all',
+                      name: 'All Lists',
+                      color: '#6B7280',
+                      isLocked: false,
+                      createdAt: new Date(),
+                      updatedAt: new Date()
+                    } as any}
+                    isActive={currentListId === 'all' && currentView !== 'trash' && currentView !== 'complete'}
+                    onSelect={() => {
+                      setCurrentList('all');
+                      if (currentView === 'trash' || currentView === 'complete') setCurrentView('tasks');
+                    }}
+                  />
+                </div>
+              </div>
+              {/* Divider between All Lists and Personal Lists */}
+              <div className="border-b border-gray-200 mb-4"></div>
+            </>
+          )}
+
+          {/* Personal Lists header */}
           <div className="flex justify-between items-center mb-2">
-            <h2 className="text-sm font-medium text-gray-600 uppercase">Lists</h2>
+            <h2 className="text-sm font-semibold text-gray-500">Personal Lists</h2>
             <button
               onClick={async () => {
                 const name = prompt('Enter list name:');
@@ -557,26 +592,6 @@ export const Sidebar: React.FC = () => {
             </button>
           </div>
           <div className="space-y-1">
-            {/* All items list */}
-            {showAllList && (
-              <DroppableListItem
-                key="all"
-                list={{ 
-                  id: 'all', 
-                  name: 'All', 
-                  color: '#6B7280',
-                  isLocked: false,
-                  createdAt: new Date(),
-                  updatedAt: new Date()
-                } as any}
-                isActive={currentListId === 'all' && currentView !== 'trash' && currentView !== 'complete'}
-                onSelect={() => {
-                  setCurrentList('all');
-                  if (currentView === 'trash' || currentView === 'complete') setCurrentView('tasks');
-                }}
-              />
-            )}
-            
             {/* Personal lists (not shared) */}
             {lists.filter(list => !list.sharedWith || list.sharedWith.length === 0).map((list) => (
               <DroppableListItem
@@ -609,7 +624,7 @@ export const Sidebar: React.FC = () => {
             {lists.some(list => list.sharedWith && list.sharedWith.length > 0) && (
               <>
                 <div className="px-3 py-2 mt-4">
-                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Shared</h3>
+                  <h3 className="text-sm font-semibold text-gray-500">Shared Lists</h3>
                 </div>
                 {lists.filter(list => list.sharedWith && list.sharedWith.length > 0).map((list) => (
                   <DroppableListItem
@@ -736,11 +751,16 @@ export const Sidebar: React.FC = () => {
                 )}
               </button>
               
-              {/* Show "All" list toggle */}
+              {/* Preferences section */}
+              <div className="px-4 py-2">
+                <h4 className="text-xs font-semibold text-gray-500 uppercase mb-2">Preferences</h4>
+              </div>
+
+              {/* Show "All Lists" toggle */}
               <div className="flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-100">
                 <label className="flex items-center cursor-pointer flex-1">
                   <span className="mr-2">📋</span>
-                  <span className="flex-1">Show "All" list</span>
+                  <span className="flex-1">Show "All Lists"</span>
                   <input
                     type="checkbox"
                     checked={showAllList}

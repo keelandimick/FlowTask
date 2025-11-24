@@ -11,10 +11,9 @@ import { categorizeItems } from '../lib/ai';
 interface TaskBoardProps {
   activeId: string | null;
   notesOpen: boolean;
-  onMobileBack: () => void;
 }
 
-export const TaskBoard: React.FC<TaskBoardProps> = ({ activeId, notesOpen, onMobileBack }) => {
+export const TaskBoard: React.FC<TaskBoardProps> = ({ activeId, notesOpen }) => {
   const {
     currentView,
     setCurrentView,
@@ -184,20 +183,6 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ activeId, notesOpen, onMob
     }
   }, [currentView, displayMode, setDisplayMode]);
 
-  // Force category view on mobile for better layout
-  React.useEffect(() => {
-    const checkMobile = () => {
-      const isMobile = window.innerWidth < 768;
-      if (isMobile && displayMode === 'column' && currentView !== 'trash' && currentView !== 'complete') {
-        setDisplayMode('category');
-      }
-    };
-
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, [displayMode, currentView, setDisplayMode]);
-
   // Close user menu when clicking outside
   React.useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -235,21 +220,8 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ activeId, notesOpen, onMob
           }
         }}
       >
-        {/* Mobile back button */}
-        <div className="md:hidden px-4 pt-3 pb-2">
-          <button
-            onClick={onMobileBack}
-            className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            <span className="font-medium">Lists</span>
-          </button>
-        </div>
-
         {/* View tabs */}
-        <div className="px-6 pt-4 md:pt-4">
+        <div className="px-6 pt-4">
           <div className="flex justify-between items-center border-b border-gray-200">
             <div className="flex">
             <button
@@ -338,9 +310,9 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ activeId, notesOpen, onMob
             {getViewInfo().title}
           </h2>
 
-          {/* Column/Category toggle - inline with title, for Tasks, Reminders, and Recurring tabs - hidden on mobile */}
+          {/* Column/Category toggle - inline with title, for Tasks, Reminders, and Recurring tabs */}
           {(currentView === 'tasks' || currentView === 'reminders' || currentView === 'recurring') && (
-            <div className="hidden md:flex items-center gap-2">
+            <div className="flex items-center gap-2">
               <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
                 <button
                   onClick={() => setDisplayMode('column')}
@@ -498,8 +470,8 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ activeId, notesOpen, onMob
         <div className="flex gap-4 p-6 pt-3 flex-1 overflow-auto">
           {displayMode === 'category' && (currentView === 'tasks' || currentView === 'reminders' || currentView === 'recurring') ? (
             <>
-              {/* Single column category view with sub-headers - hide on mobile when notes open */}
-              <div className={`flex-1 flex flex-col gap-3 overflow-auto ${notesOpen ? 'hidden md:flex' : ''}`}>
+              {/* Single column category view with sub-headers */}
+              <div className="flex-1 flex flex-col gap-3 overflow-auto">
                 {getCategoryColumns().map(category => {
                   let categoryItems: typeof items;
 
@@ -546,38 +518,31 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ activeId, notesOpen, onMob
               </div>
               {notesOpen && (
                 <>
-                  <div className={`w-px bg-gray-200 ${notesOpen ? 'hidden md:block' : ''}`} />
+                  <div className="w-px bg-gray-200" />
                   <Notes isOpen={true} />
                 </>
               )}
             </>
           ) : (
             <>
-              {/* Standard column view - hide on mobile when notes open */}
-              <div className={`flex gap-4 flex-1 ${notesOpen ? 'hidden md:flex' : 'flex'}`}>
-                {columns.map((column, index) => (
-                  <React.Fragment key={column.id}>
-                    <TaskColumn
-                      title={column.title}
-                      columnId={column.id}
-                      items={
-                        currentView === 'trash'
-                          ? items
-                          : items.filter(item => item.status === column.id)
-                      }
-                    />
-                    {index < columns.length - 1 && (
-                      <div className="w-px bg-gray-200" />
-                    )}
-                  </React.Fragment>
-                ))}
-              </div>
-              {notesOpen && (
-                <>
-                  <div className="hidden md:block w-px bg-gray-200" />
-                  <Notes isOpen={true} />
-                </>
-              )}
+              {/* Standard column view */}
+              {columns.map((column, index) => (
+                <React.Fragment key={column.id}>
+                  <TaskColumn
+                    title={column.title}
+                    columnId={column.id}
+                    items={
+                      currentView === 'trash'
+                        ? items
+                        : items.filter(item => item.status === column.id)
+                    }
+                  />
+                  {(index < columns.length - 1 || notesOpen) && (
+                    <div className="w-px bg-gray-200" />
+                  )}
+                </React.Fragment>
+              ))}
+              {notesOpen && <Notes isOpen={true} />}
             </>
           )}
         </div>

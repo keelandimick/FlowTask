@@ -9,9 +9,10 @@ interface NotesProps {
 }
 
 export const Notes: React.FC<NotesProps> = ({ isOpen }) => {
-  const { selectedItemId, items, addNote, deleteNote, updateNote, updateItem, setCurrentView, setHighlightedItem } = useStoreWithAuth();
+  const { selectedItemId, items, addNote, deleteNote, updateNote, updateItem, setCurrentView, setHighlightedItem, setSelectedItem } = useStoreWithAuth();
   const [noteInput, setNoteInput] = useState('');
   const [showOnHoldIndicator, setShowOnHoldIndicator] = useState(false);
+  const [showOffHoldIndicator, setShowOffHoldIndicator] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState('');
@@ -20,6 +21,7 @@ export const Notes: React.FC<NotesProps> = ({ isOpen }) => {
   const [editingTitle, setEditingTitle] = useState('');
   const [previewDate, setPreviewDate] = useState<Date | null>(null);
   const [previewRecurrence, setPreviewRecurrence] = useState<string | null>(null);
+  const [previewDismissed, setPreviewDismissed] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const selectedItem = items.find(item => item.id === selectedItemId);
@@ -72,6 +74,7 @@ export const Notes: React.FC<NotesProps> = ({ isOpen }) => {
       
       setNoteInput('');
       setShowOnHoldIndicator(false);
+      setShowOffHoldIndicator(false);
     } catch (error) {
       console.error('Failed to add note:', error);
     } finally {
@@ -114,19 +117,70 @@ export const Notes: React.FC<NotesProps> = ({ isOpen }) => {
                       const value = e.target.value;
                       setEditingTitle(value);
 
-                      // Live preview of dates/recurrence
-                      const recurringMatch = value.match(/\b(every\s+(other\s+)?\d*\s*(day|week|month|year|hours?|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|daily|weekly|monthly|yearly|annually|weekdays?|weekends?)\b/i);
-                      if (recurringMatch) {
-                        setPreviewRecurrence(recurringMatch[0]);
-                        setPreviewDate(null);
-                      } else {
-                        const parsedDate = customChrono.parseDate(value);
-                        if (parsedDate) {
-                          setPreviewDate(parsedDate);
-                          setPreviewRecurrence(null);
-                        } else {
+                      // Only show preview if not dismissed
+                      if (!previewDismissed) {
+                        // Live preview of dates/recurrence
+                        const recurringMatch = value.match(/\b(every\s+(other\s+)?\d*\s*(day|week|month|year|hours?|mon(day)?|tue(sday)?|wed(nesday)?|thu(rsday)?|fri(day)?|sat(urday)?|sun(day)?)|daily|weekly|monthly|yearly|annually|weekdays?|weekends?)\b/i);
+                        if (recurringMatch) {
+                          // Format the recurring pattern nicely
+                          let patternText = recurringMatch[0].toLowerCase();
+
+                          // Expand day abbreviations
+                          const dayMap: Record<string, string> = {
+                            'mon': 'Monday', 'monday': 'Monday',
+                            'tue': 'Tuesday', 'tuesday': 'Tuesday',
+                            'wed': 'Wednesday', 'wednesday': 'Wednesday',
+                            'thu': 'Thursday', 'thursday': 'Thursday',
+                            'fri': 'Friday', 'friday': 'Friday',
+                            'sat': 'Saturday', 'saturday': 'Saturday',
+                            'sun': 'Sunday', 'sunday': 'Sunday'
+                          };
+
+                          // Replace abbreviated days with full names
+                          Object.entries(dayMap).forEach(([abbr, full]) => {
+                            const regex = new RegExp(`\\b${abbr}\\b`, 'i');
+                            if (regex.test(patternText)) {
+                              patternText = patternText.replace(regex, full);
+                            }
+                          });
+
+                          // Capitalize first letter
+                          let displayText = patternText.charAt(0).toUpperCase() + patternText.slice(1);
+
+                          // Parse time (with or without AM/PM)
+                          const timeMatch = value.match(/\b(at\s+)?(\d{1,2})(:\d{2})?\s*(am|pm|AM|PM)?\b/i);
+                          if (timeMatch && timeMatch[2]) {
+                            let hours = parseInt(timeMatch[2], 10);
+                            const minutes = timeMatch[3] ? parseInt(timeMatch[3].slice(1), 10) : 0;
+
+                            // Parse AM/PM or use smart defaults
+                            if (timeMatch[4]) {
+                              const isPM = timeMatch[4].toLowerCase() === 'pm';
+                              if (isPM && hours !== 12) hours += 12;
+                              if (!isPM && hours === 12) hours = 0;
+                            } else if (hours >= 1 && hours <= 11) {
+                              hours += 12; // Default to PM
+                            }
+
+                            // Format time nicely
+                            const period = hours >= 12 ? 'PM' : 'AM';
+                            const displayHours = hours > 12 ? hours - 12 : (hours === 0 ? 12 : hours);
+                            const formattedTime = `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
+
+                            displayText += ` at ${formattedTime}`;
+                          }
+
+                          setPreviewRecurrence(displayText);
                           setPreviewDate(null);
-                          setPreviewRecurrence(null);
+                        } else {
+                          const parsedDate = customChrono.parseDate(value);
+                          if (parsedDate) {
+                            setPreviewDate(parsedDate);
+                            setPreviewRecurrence(null);
+                          } else {
+                            setPreviewDate(null);
+                            setPreviewRecurrence(null);
+                          }
                         }
                       }
                     }}
@@ -135,26 +189,101 @@ export const Notes: React.FC<NotesProps> = ({ isOpen }) => {
                         e.preventDefault();
                         if (!editingTitle.trim() || !selectedItem) return;
 
-                        // Parse for dates and recurring patterns
+                        // Parse for dates and recurring patterns (only if not dismissed)
                         let finalTitle = editingTitle.trim();
                         let updates: any = { title: finalTitle };
 
-                        // Check for recurring patterns first
-                        const recurringMatch = editingTitle.match(/\b(every\s+(other\s+)?\d*\s*(day|week|month|year|hours?|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|daily|weekly|monthly|yearly|annually|weekdays?|weekends?)\b/i);
-                        if (recurringMatch) {
+                        // Skip date/time parsing if user dismissed the preview
+                        if (!previewDismissed) {
+                          // Check for recurring patterns first
+                          const recurringMatch = editingTitle.match(/\b(every\s+(other\s+)?\d*\s*(day|week|month|year|hours?|mon(day)?|tue(sday)?|wed(nesday)?|thu(rsday)?|fri(day)?|sat(urday)?|sun(day)?)|daily|weekly|monthly|yearly|annually|weekdays?|weekends?)\b/i);
+                          if (recurringMatch) {
                           // Extract recurrence and clean title
                           finalTitle = editingTitle.replace(recurringMatch[0], '').trim();
                           if (finalTitle.length > 0) {
                             finalTitle = finalTitle.charAt(0).toUpperCase() + finalTitle.slice(1);
                           }
+
+                          // Determine frequency and time (matching edge function logic)
+                          const matchText = recurringMatch[0].toLowerCase();
+                          let frequency: string;
+                          let interval = 1;
+
+                          if (matchText.includes('hour')) {
+                            frequency = 'hourly';
+                            // Extract interval (e.g., "every 3 hours" -> 3)
+                            const intervalMatch = matchText.match(/every\s+(\d+)\s+hours?/);
+                            if (intervalMatch) {
+                              interval = parseInt(intervalMatch[1], 10);
+                            }
+                          } else if (matchText.includes('day')) {
+                            frequency = 'daily';
+                          } else if (matchText.includes('week')) {
+                            frequency = 'weekly';
+                          } else if (matchText.includes('month')) {
+                            frequency = 'monthly';
+                          } else if (matchText.includes('year')) {
+                            frequency = 'yearly';
+                          } else {
+                            frequency = 'weekly';
+                          }
+
+                          // Use 'within7' status for all recurring reminders (database only allows today/within7/7plus)
+                          // Client-side filtering will show it in recurring tab based on recurrence field
+                          updates.status = 'within7';
+
+                          // Calculate time based on frequency
+                          const now = new Date();
+                          let time: string;
+
+                          if (frequency === 'hourly') {
+                            // For hourly: start from current time + interval
+                            const nextOccurrence = new Date(now.getTime() + interval * 60 * 60 * 1000);
+                            time = nextOccurrence.toTimeString().slice(0, 5); // HH:MM format
+                            updates.reminderDate = nextOccurrence.toISOString();
+                          } else {
+                            // For daily/weekly/monthly/yearly: try to parse time from title
+                            const timeMatch = editingTitle.match(/\b(at\s+)?(\d{1,2})(:\d{2})?\s*(am|pm|AM|PM)?\b/i);
+                            if (timeMatch && timeMatch[2]) {
+                              // Parse the time (e.g., "3 pm", "3:00pm", "3:30 PM", "3", "15")
+                              let hours = parseInt(timeMatch[2], 10);
+                              const minutes = timeMatch[3] ? parseInt(timeMatch[3].slice(1), 10) : 0;
+
+                              // If AM/PM specified, use it. Otherwise infer based on hour
+                              if (timeMatch[4]) {
+                                const isPM = timeMatch[4].toLowerCase() === 'pm';
+                                if (isPM && hours !== 12) hours += 12;
+                                if (!isPM && hours === 12) hours = 0;
+                              } else if (hours >= 1 && hours <= 11) {
+                                // For hours 1-11, default to PM (more common for reminders)
+                                hours += 12;
+                              }
+                              // Hours 12-23 stay as-is (already in 24-hour format)
+
+                              time = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+
+                              // Strip the time from the title (like reminders do)
+                              finalTitle = finalTitle.replace(timeMatch[0], '').trim();
+                              // Re-capitalize after stripping
+                              if (finalTitle.length > 0) {
+                                finalTitle = finalTitle.charAt(0).toUpperCase() + finalTitle.slice(1);
+                              }
+                            } else {
+                              // Default to current time if no time specified
+                              time = now.toTimeString().slice(0, 5);
+                            }
+                            // Clear any existing reminder date (recurring replaces one-time reminder)
+                            updates.reminderDate = null;
+                          }
+
                           updates.title = finalTitle;
                           updates.type = 'reminder';
                           updates.recurrence = {
-                            frequency: 'weekly',
-                            time: '09:00',
+                            frequency,
+                            time,
+                            interval: frequency === 'hourly' ? interval : undefined,
                             originalText: recurringMatch[0]
                           };
-                          updates.status = 'weekly';
                         } else {
                           // Check for single date
                           const parsedDate = customChrono.parseDate(editingTitle);
@@ -183,7 +312,14 @@ export const Notes: React.FC<NotesProps> = ({ isOpen }) => {
                             } else {
                               updates.status = '7plus';
                             }
+                          } else {
+                            // No date detected - clear recurrence and reminder date (convert to task)
+                            updates.recurrence = null;
+                            updates.reminderDate = null;
+                            updates.type = 'task';
+                            updates.status = 'start';
                           }
+                        }
                         }
 
                         // Capitalize first letter
@@ -207,6 +343,7 @@ export const Notes: React.FC<NotesProps> = ({ isOpen }) => {
                           setEditingTitle('');
                           setPreviewDate(null);
                           setPreviewRecurrence(null);
+                          setPreviewDismissed(false);
                           return;
                         }
 
@@ -216,24 +353,55 @@ export const Notes: React.FC<NotesProps> = ({ isOpen }) => {
                           setEditingTitle('');
                           setPreviewDate(null);
                           setPreviewRecurrence(null);
+                          setPreviewDismissed(false);
 
-                          // Navigate to appropriate view if type changed
-                          if (updates.type === 'reminder') {
-                            let targetView: 'tasks' | 'reminders' | 'recurring' | 'complete' | 'trash' = 'reminders';
-                            if (updates.recurrence) {
+                          // Navigate to appropriate view if type/category changed
+                          const typeChanged = updates.type && updates.type !== selectedItem.type;
+                          const addedRecurrence = updates.recurrence && !selectedItem.recurrence;
+                          const clearedRecurrence = updates.recurrence === null && selectedItem.recurrence;
+                          const addedReminderDate = 'reminderDate' in updates && updates.reminderDate && !('reminderDate' in selectedItem && selectedItem.reminderDate);
+                          const clearedReminderDate = 'reminderDate' in updates && updates.reminderDate === null && ('reminderDate' in selectedItem && selectedItem.reminderDate);
+                          const listChanged = updates.listId && updates.listId !== selectedItem.listId;
+
+                          // Trigger navigation for ANY conversion: task↔reminder, task↔recurring, reminder↔recurring
+                          if (typeChanged || addedRecurrence || clearedRecurrence || addedReminderDate || clearedReminderDate || listChanged) {
+                            // Determine target view based on what the item will become
+                            let targetView: 'tasks' | 'reminders' | 'recurring' | 'complete' | 'trash';
+
+                            // Priority: recurring > reminder > task
+                            if (updates.recurrence || (selectedItem.recurrence && !clearedRecurrence)) {
+                              // Has recurrence (or keeping existing recurrence) → recurring tab
                               targetView = 'recurring';
+                            } else if (updates.reminderDate || (('reminderDate' in selectedItem && selectedItem.reminderDate) && !clearedReminderDate)) {
+                              // Has reminder date (or keeping existing date) and no recurrence → reminders tab
+                              targetView = 'reminders';
+                            } else {
+                              // No recurrence and no reminder date → tasks tab
+                              targetView = 'tasks';
                             }
+
+                            // Navigate instantly
                             setCurrentView(targetView);
-                            setHighlightedItem(selectedItem.id);
+                            // Highlight after view renders
+                            setTimeout(() => setHighlightedItem(selectedItem.id), 50);
+                            // Close Notes after you see the navigation
+                            setTimeout(() => setSelectedItem(null), 100);
                           }
                         } catch (error) {
                           console.error('Failed to update title:', error);
                         }
                       } else if (e.key === 'Escape') {
-                        setIsEditingTitle(false);
-                        setEditingTitle('');
-                        setPreviewDate(null);
-                        setPreviewRecurrence(null);
+                        // First ESC: Dismiss date/time preview only
+                        if (previewDate || previewRecurrence) {
+                          setPreviewDate(null);
+                          setPreviewRecurrence(null);
+                          setPreviewDismissed(true); // Mark as dismissed for this edit session
+                        } else {
+                          // Second ESC: Close editing entirely
+                          setIsEditingTitle(false);
+                          setEditingTitle('');
+                          setPreviewDismissed(false);
+                        }
                       }
                     }}
                     onBlur={() => {
@@ -241,6 +409,7 @@ export const Notes: React.FC<NotesProps> = ({ isOpen }) => {
                       setEditingTitle('');
                       setPreviewDate(null);
                       setPreviewRecurrence(null);
+                      setPreviewDismissed(false);
                     }}
                     autoFocus
                     className="w-full px-2 py-1 text-sm font-medium text-gray-900 border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -287,6 +456,7 @@ export const Notes: React.FC<NotesProps> = ({ isOpen }) => {
                     onClick={() => {
                       setIsEditingTitle(true);
                       setEditingTitle(selectedItem.title);
+                      setPreviewDismissed(false); // Reset for new edit session
                     }}
                   >
                     <span className="text-sm font-medium text-gray-900 flex-1">
@@ -316,6 +486,12 @@ export const Notes: React.FC<NotesProps> = ({ isOpen }) => {
                                 reminderDate: null,
                                 recurrence: null
                               } as any);
+                              // Navigate instantly
+                              setCurrentView('tasks');
+                              // Highlight after view renders
+                              setTimeout(() => setHighlightedItem(selectedItem.id), 50);
+                              // Close Notes after you see the navigation
+                              setTimeout(() => setSelectedItem(null), 100);
                             } catch (error) {
                               console.error('Failed to clear date:', error);
                             }
@@ -352,6 +528,12 @@ export const Notes: React.FC<NotesProps> = ({ isOpen }) => {
                                 reminderDate: null,
                                 recurrence: null
                               } as any);
+                              // Navigate instantly
+                              setCurrentView('tasks');
+                              // Highlight after view renders
+                              setTimeout(() => setHighlightedItem(selectedItem.id), 50);
+                              // Close Notes after you see the navigation
+                              setTimeout(() => setSelectedItem(null), 100);
                             } catch (error) {
                               console.error('Failed to clear recurrence:', error);
                             }
@@ -544,18 +726,29 @@ export const Notes: React.FC<NotesProps> = ({ isOpen }) => {
                       ON HOLD
                     </span>
                   )}
+                  {showOffHoldIndicator && (
+                    <span className="text-xs font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded whitespace-nowrap">
+                      OFF HOLD
+                    </span>
+                  )}
                   <input
                     type="text"
-                    value={showOnHoldIndicator ? noteInput.replace(/^on hold\s*/i, '') : noteInput}
+                    value={showOnHoldIndicator ? noteInput.replace(/^on hold\s*/i, '') : showOffHoldIndicator ? '' : noteInput}
                     onChange={(e) => {
                       const value = e.target.value;
                       if (showOnHoldIndicator) {
                         setNoteInput('on hold ' + value);
+                      } else if (showOffHoldIndicator) {
+                        // OFF HOLD is complete, don't allow editing
+                        setNoteInput('off hold');
                       } else {
                         setNoteInput(value);
                         if (value.toLowerCase() === 'on hold') {
                           setShowOnHoldIndicator(true);
                           setNoteInput('on hold ');
+                        } else if (value.toLowerCase() === 'off hold') {
+                          setShowOffHoldIndicator(true);
+                          setNoteInput('off hold');
                         }
                       }
                     }}
@@ -566,14 +759,26 @@ export const Notes: React.FC<NotesProps> = ({ isOpen }) => {
                         setNoteInput('');
                         setShowOnHoldIndicator(false);
                       }
+                      // Handle backspace for OFF HOLD tag
+                      if (e.key === 'Backspace' && showOffHoldIndicator) {
+                        e.preventDefault();
+                        setNoteInput('');
+                        setShowOffHoldIndicator(false);
+                      }
                       // Handle escape to remove ON HOLD tag
                       if (e.key === 'Escape' && showOnHoldIndicator) {
                         e.preventDefault();
                         setNoteInput('');
                         setShowOnHoldIndicator(false);
                       }
+                      // Handle escape to remove OFF HOLD tag
+                      if (e.key === 'Escape' && showOffHoldIndicator) {
+                        e.preventDefault();
+                        setNoteInput('');
+                        setShowOffHoldIndicator(false);
+                      }
                     }}
-                    placeholder={showOnHoldIndicator ? "reason for on hold" : 'Add a note... (Try typing "on hold")'}
+                    placeholder={showOnHoldIndicator ? "reason for on hold" : showOffHoldIndicator ? "Press Enter to submit" : 'Add a note... (Try "on hold" or "off hold")'}
                     disabled={isProcessing}
                     className="flex-1 bg-transparent border-none outline-none focus:outline-none p-0 disabled:opacity-50"
                   />
