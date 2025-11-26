@@ -152,7 +152,10 @@ const DroppableListItem: React.FC<DroppableListItemProps> = ({ list, isActive, o
           />
         ) : (
           <span
-            className="flex-1"
+            className="flex-1 truncate"
+            style={{
+              fontSize: list.name.length > 20 ? '0.8rem' : list.name.length > 15 ? '0.875rem' : undefined
+            }}
             onContextMenu={(e) => {
               if (!isAllList) {
                 e.preventDefault();
@@ -160,6 +163,7 @@ const DroppableListItem: React.FC<DroppableListItemProps> = ({ list, isActive, o
                 setContextMenu({ x: e.clientX, y: e.clientY });
               }
             }}
+            title={list.name}
           >
             {list.name}
           </span>
