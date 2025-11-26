@@ -6,6 +6,8 @@ import { useStoreWithAuth } from '../store/useStoreWithAuth';
 import { format } from 'date-fns';
 import { TaskModal } from './TaskModal';
 import { renderTextWithLinks } from '../lib/ai';
+import { formatRecurrence } from '../lib/formatRecurrence';
+import { ContextMenu } from './ContextMenu';
 
 interface TaskCardProps {
   item: Item;
@@ -27,23 +29,21 @@ export const TaskCard: React.FC<TaskCardProps> = ({ item }) => {
   const { deleteItem, updateItem, currentView, highlightedItemId, lists, selectedItemId, setSelectedItem, setHighlightedItem, itemsInFlight, isDashboardView, setDashboardView, setCurrentView, setCurrentList } = useStoreWithAuth();
   const [showEditModal, setShowEditModal] = React.useState(false);
   const [showPriorityOptions, setShowPriorityOptions] = React.useState(false);
+  const [contextMenu, setContextMenu] = React.useState<{ x: number; y: number } | null>(null);
+  const [isRenaming, setIsRenaming] = React.useState(false);
+  const [renameValue, setRenameValue] = React.useState(item.title);
+  const [showDatePicker, setShowDatePicker] = React.useState(false);
+  const [selectedDate, setSelectedDate] = React.useState<Date | null>(
+    item.type === 'reminder' && item.reminderDate ? new Date(item.reminderDate) : null
+  );
+  const [showMoveToList, setShowMoveToList] = React.useState(false);
+  const renameInputRef = React.useRef<HTMLInputElement>(null);
+
   const isHighlighted = highlightedItemId === item.id;
   const isSelected = selectedItemId === item.id;
   
-  // Check if item has an active "on hold" note
-  // Find the most recent ON HOLD or OFF HOLD note
-  const holdNotes = item.notes.filter(note => 
-    note.content.toLowerCase().startsWith('on hold') || 
-    note.content.toLowerCase() === 'off hold'
-  );
-  
-  const mostRecentHoldNote = holdNotes.sort((a, b) => 
-    new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-  )[0];
-  
-  const hasOnHoldNote = mostRecentHoldNote?.content.toLowerCase() === 'off hold' 
-    ? false 
-    : mostRecentHoldNote?.content.toLowerCase().startsWith('on hold');
+  // Check if item has an active "on hold" status in metadata
+  const hasOnHoldNote = !!item.metadata?.onHold;
   
   // Handle delete key press when selected
   React.useEffect(() => {
@@ -150,6 +150,16 @@ export const TaskCard: React.FC<TaskCardProps> = ({ item }) => {
             }
           }
         }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+
+          // Don't show context menu in trash or complete views
+          if (currentView === 'trash' || currentView === 'complete') return;
+
+          // Show context menu at click position
+          setContextMenu({ x: e.clientX, y: e.clientY });
+        }}
       >
         {/* Loading spinner - show when item is in flight */}
         {isInFlight && (
@@ -236,45 +246,14 @@ export const TaskCard: React.FC<TaskCardProps> = ({ item }) => {
             );
           })()}
 
-          {item.recurrence && (() => {
-            // Format recurrence text nicely (expand abbreviations)
-            let displayText = item.recurrence.originalText || item.recurrence.frequency;
-
-            // Expand day abbreviations
-            const dayMap: Record<string, string> = {
-              'mon': 'Monday', 'monday': 'Monday',
-              'tue': 'Tuesday', 'tuesday': 'Tuesday',
-              'wed': 'Wednesday', 'wednesday': 'Wednesday',
-              'thu': 'Thursday', 'thursday': 'Thursday',
-              'fri': 'Friday', 'friday': 'Friday',
-              'sat': 'Saturday', 'saturday': 'Saturday',
-              'sun': 'Sunday', 'sunday': 'Sunday'
-            };
-
-            Object.entries(dayMap).forEach(([abbr, full]) => {
-              const regex = new RegExp(`\\b${abbr}\\b`, 'i');
-              if (regex.test(displayText)) {
-                displayText = displayText.replace(regex, full);
-              }
-            });
-
-            // Capitalize first letter
-            displayText = displayText.charAt(0).toUpperCase() + displayText.slice(1);
-
-            // For interval-based recurrences (minutely/hourly), use reminderDate for accurate local time
-            const timeDisplay = (item.recurrence.frequency === 'minutely' || item.recurrence.frequency === 'hourly') && item.type === 'reminder' && item.reminderDate
-              ? format(item.reminderDate, 'h:mm a')
-              : format(new Date(`2000-01-01T${item.recurrence.time}`), 'h:mm a');
-
-            return (
-              <div className="text-[11px] text-gray-400 flex items-center gap-1 mt-0.5">
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                {`${displayText} at ${timeDisplay}`}
-              </div>
-            );
-          })()}
+          {item.recurrence && (
+            <div className="text-[11px] text-gray-400 flex items-center gap-1 mt-0.5">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {formatRecurrence(item.recurrence)}
+            </div>
+          )}
         </div>
 
         {/* Notes indicator and Priority badge container */}
@@ -357,6 +336,183 @@ export const TaskCard: React.FC<TaskCardProps> = ({ item }) => {
         mode="edit"
         editItem={item}
       />
+
+      {/* Rename Modal */}
+      {isRenaming && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setIsRenaming(false)}>
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold mb-4">Rename Task</h3>
+            <input
+              ref={renameInputRef}
+              type="text"
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onKeyDown={async (e) => {
+                if (e.key === 'Enter') {
+                  await updateItem(item.id, { title: renameValue });
+                  setIsRenaming(false);
+                } else if (e.key === 'Escape') {
+                  setIsRenaming(false);
+                }
+              }}
+              className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Enter new name"
+            />
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={() => setIsRenaming(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  await updateItem(item.id, { title: renameValue });
+                  setIsRenaming(false);
+                }}
+                className="flex-1 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Move to List Modal */}
+      {showMoveToList && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowMoveToList(false)}>
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold mb-4">Move to List</h3>
+            <div className="space-y-2">
+              {lists.map((list) => (
+                <button
+                  key={list.id}
+                  onClick={async () => {
+                    await updateItem(item.id, { listId: list.id });
+                    setShowMoveToList(false);
+                  }}
+                  className={`w-full text-left px-4 py-3 rounded border ${
+                    list.id === item.listId
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="w-4 h-4 rounded-full"
+                      style={{ backgroundColor: list.color }}
+                    />
+                    <span className="font-medium">{list.name}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setShowMoveToList(false)}
+              className="w-full mt-4 px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Date Picker Modal */}
+      {showDatePicker && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowDatePicker(false)}>
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold mb-4">
+              {item.type === 'reminder' && item.reminderDate ? 'Edit Date/Time' : 'Add Date/Time'}
+            </h3>
+            <input
+              type="datetime-local"
+              value={selectedDate ? format(selectedDate, "yyyy-MM-dd'T'HH:mm") : ''}
+              onChange={(e) => {
+                if (e.target.value) {
+                  setSelectedDate(new Date(e.target.value));
+                }
+              }}
+              className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <div className="flex gap-2 mt-4">
+              {item.type === 'reminder' && item.reminderDate && (
+                <button
+                  onClick={async () => {
+                    await updateItem(item.id, { type: 'task', status: 'start' } as any);
+                    setShowDatePicker(false);
+                  }}
+                  className="px-4 py-2 text-red-600 hover:bg-red-50 rounded"
+                >
+                  Remove
+                </button>
+              )}
+              <button
+                onClick={() => setShowDatePicker(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (selectedDate) {
+                    await updateItem(item.id, {
+                      reminderDate: selectedDate,
+                      type: 'reminder',
+                      status: 'within7',
+                    } as any);
+                  }
+                  setShowDatePicker(false);
+                }}
+                className="flex-1 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(null)}
+          options={[
+            {
+              label: 'Rename',
+              icon: '✏️',
+              onClick: () => {
+                setIsRenaming(true);
+                setRenameValue(item.title);
+                // Focus input after state update
+                setTimeout(() => renameInputRef.current?.focus(), 0);
+              },
+            },
+            {
+              label: 'Move to List',
+              icon: '📁',
+              onClick: () => {
+                setShowMoveToList(true);
+              },
+            },
+            {
+              label: item.type === 'reminder' && item.reminderDate ? 'Edit Date/Time' : 'Add Date/Time',
+              icon: '📅',
+              onClick: () => {
+                setShowDatePicker(true);
+                setSelectedDate(
+                  item.type === 'reminder' && item.reminderDate
+                    ? new Date(item.reminderDate)
+                    : new Date()
+                );
+              },
+              disabled: !!item.recurrence, // Disable for recurring items
+            },
+          ]}
+        />
+      )}
     </div>
   );
 };

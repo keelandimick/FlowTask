@@ -1,5 +1,7 @@
 import { supabase, Database } from './supabase';
 import { Item, List, Note, RecurrenceSettings } from '../types';
+import { parseRecurrenceFromText } from './parseRecurrence';
+import customChrono from './chronoConfig';
 
 type DbItem = Database['public']['Tables']['items']['Row'];
 type DbList = Database['public']['Tables']['lists']['Row'];
@@ -284,14 +286,33 @@ export const db = {
     }
   },
 
-  // Quick add using edge function (handles AI, date parsing, recurring patterns)
-  async quickAdd(text: string, reminderDate?: Date): Promise<Item> {
+  // Quick add using edge function (handles AI only - we parse locally now)
+  async quickAdd(text: string): Promise<Item> {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw new Error('User not authenticated');
 
-    const payload: { text: string; reminder_date?: string } = { text };
-    if (reminderDate) {
-      payload.reminder_date = reminderDate.toISOString();
+    const payload: { text: string; reminder_date?: string; recurrence?: any } = { text };
+
+    // Parse recurrence locally first (highest priority)
+    const detectedRecurrence = parseRecurrenceFromText(text);
+    if (detectedRecurrence) {
+      // Send parsed recurrence to edge function
+      payload.recurrence = {
+        frequency: detectedRecurrence.frequency,
+        time: detectedRecurrence.time,
+        interval: detectedRecurrence.interval,
+        dayOfMonth: detectedRecurrence.dayOfMonth,
+        monthOfYear: detectedRecurrence.monthOfYear,
+        originalText: detectedRecurrence.originalText
+      };
+    } else {
+      // If no recurrence, try to parse single date
+      const parsed = customChrono.parse(text.trim());
+      if (parsed.length > 0) {
+        payload.reminder_date = parsed[0].start.date().toISOString();
+        // Store matched text so edge function can strip it
+        payload.recurrence = { originalText: parsed[0].text };
+      }
     }
 
     const { data, error } = await supabase.functions.invoke('quick-add', {

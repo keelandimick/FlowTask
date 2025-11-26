@@ -3,6 +3,7 @@ import { useDroppable } from '@dnd-kit/core';
 import { useStoreWithAuth } from '../store/useStoreWithAuth';
 import { TaskModal } from './TaskModal';
 import { useAuth } from '../contexts/AuthContext';
+import { ContextMenu } from './ContextMenu';
 
 interface DroppableListItemProps {
   list: any;
@@ -23,8 +24,9 @@ const DroppableListItem: React.FC<DroppableListItemProps> = ({ list, isActive, o
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showCollaborateModal, setShowCollaborateModal] = useState(false);
   const [collaboratorEmails, setCollaboratorEmails] = useState('');
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
-  
+
   const isAllList = list.id === 'all';
   const hasCollaborators = list.sharedWith && list.sharedWith.length > 0;
   
@@ -73,7 +75,7 @@ const DroppableListItem: React.FC<DroppableListItemProps> = ({ list, isActive, o
       >
       <div
         onClick={onSelect}
-        className="flex items-center flex-1 cursor-pointer"
+        className="flex items-center flex-1 min-w-0 cursor-pointer"
       >
         {/* Color indicator or icon for "All Lists" */}
         <div className={`relative color-picker-${list.id}`}>
@@ -144,17 +146,18 @@ const DroppableListItem: React.FC<DroppableListItemProps> = ({ list, isActive, o
               }
             }}
             onClick={(e) => e.stopPropagation()}
-            className="flex-1 bg-transparent border-none outline-none focus:outline-none focus:ring-0 p-0 m-0"
+            className="flex-1 min-w-0 bg-transparent border-none outline-none focus:outline-none focus:ring-0 p-0 m-0"
             autoFocus
             spellCheck="true"
           />
         ) : (
           <span
             className="flex-1"
-            onDoubleClick={() => {
+            onContextMenu={(e) => {
               if (!isAllList) {
-                setIsEditingName(true);
-                setEditName(list.name);
+                e.preventDefault();
+                e.stopPropagation();
+                setContextMenu({ x: e.clientX, y: e.clientY });
               }
             }}
           >
@@ -310,6 +313,26 @@ const DroppableListItem: React.FC<DroppableListItemProps> = ({ list, isActive, o
           </div>
         </div>
       </div>
+    )}
+
+    {/* Context Menu for list rename */}
+    {contextMenu && (
+      <ContextMenu
+        x={contextMenu.x}
+        y={contextMenu.y}
+        onClose={() => setContextMenu(null)}
+        options={[
+          {
+            label: 'Rename',
+            icon: '✏️',
+            onClick: () => {
+              setIsEditingName(true);
+              setEditName(list.name);
+              setTimeout(() => nameInputRef.current?.focus(), 0);
+            },
+          },
+        ]}
+      />
     )}
     </>
   );

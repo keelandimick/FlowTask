@@ -875,11 +875,24 @@ export const useStore = create<Store>((set, get) => ({
 
     const state = get();
 
+    // DEBUG: Log all lists the user has access to
+    console.log('[Realtime DEBUG] Total lists user has access to:', state.lists.length);
+    state.lists.forEach(list => {
+      console.log(`[Realtime DEBUG] List: ${list.name}`, {
+        id: list.id,
+        sharedWith: list.sharedWith,
+        hasSharedWith: !!(list.sharedWith && list.sharedWith.length > 0)
+      });
+    });
+
     // Get shared list IDs
     const sharedLists = state.lists.filter(list =>
       list.sharedWith && list.sharedWith.length > 0
     );
     const sharedListIds = sharedLists.map(l => l.id);
+
+    console.log('[Realtime DEBUG] Filtered shared lists count:', sharedLists.length);
+    console.log('[Realtime DEBUG] Shared list IDs that will be subscribed:', sharedListIds);
 
     if (sharedListIds.length === 0) {
       console.log('[Realtime] No shared lists found, skipping subscription setup');
@@ -901,13 +914,18 @@ export const useStore = create<Store>((set, get) => ({
           filter: `list_id=in.(${sharedListIds.join(',')})`
         },
         (payload) => {
-          console.log('[Realtime] Items change:', payload);
+          console.log('[Realtime] Items change received:', {
+            eventType: payload.eventType,
+            listId: (payload.new as any)?.list_id || (payload.old as any)?.list_id,
+            itemId: (payload.new as any)?.id || (payload.old as any)?.id,
+            title: (payload.new as any)?.title
+          });
           if (payload.eventType === 'INSERT') {
             get().handleRealtimeInsert('items', payload.new);
           } else if (payload.eventType === 'UPDATE') {
             get().handleRealtimeUpdate('items', payload.new);
           } else if (payload.eventType === 'DELETE') {
-            get().handleRealtimeDelete('items', payload.old.id);
+            get().handleRealtimeDelete('items', (payload.old as any).id);
           }
         }
       )
@@ -925,11 +943,15 @@ export const useStore = create<Store>((set, get) => ({
           filter: `id=in.(${sharedListIds.join(',')})`
         },
         (payload) => {
-          console.log('[Realtime] Lists change:', payload);
+          console.log('[Realtime] Lists change received:', {
+            eventType: payload.eventType,
+            listId: (payload.new as any)?.id || (payload.old as any)?.id,
+            listName: (payload.new as any)?.name
+          });
           if (payload.eventType === 'UPDATE') {
             get().handleRealtimeUpdate('lists', payload.new);
           } else if (payload.eventType === 'DELETE') {
-            get().handleRealtimeDelete('lists', payload.old.id);
+            get().handleRealtimeDelete('lists', (payload.old as any).id);
           }
         }
       )

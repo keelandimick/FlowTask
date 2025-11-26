@@ -5,6 +5,8 @@ import { ViewMode, Item } from '../types';
 import { format } from 'date-fns';
 import { db } from '../lib/database';
 import customChrono from '../lib/chronoConfig';
+import { formatRecurrence } from '../lib/formatRecurrence';
+import { parseRecurrenceFromText } from '../lib/parseRecurrence';
 
 interface TaskModalProps {
   isOpen: boolean;
@@ -145,62 +147,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, mode, edi
               spellCheck="true"
             />
             {mode === 'create' && (() => {
-              // Check for recurring patterns
-              const recurringMatch = title.match(/\b(every\s+(other\s+)?\d*\s*(day|week|month|year|minutes?|hours?|mon(day)?|tue(sday)?|wed(nesday)?|thu(rsday)?|fri(day)?|sat(urday)?|sun(day)?)|daily|weekly|monthly|yearly|annually|weekdays?|weekends?)\b/i);
-              if (recurringMatch) {
-                // Format the recurring pattern nicely
-                let patternText = recurringMatch[0].toLowerCase();
-
-                // Expand day abbreviations
-                const dayMap: Record<string, string> = {
-                  'mon': 'Monday', 'monday': 'Monday',
-                  'tue': 'Tuesday', 'tuesday': 'Tuesday',
-                  'wed': 'Wednesday', 'wednesday': 'Wednesday',
-                  'thu': 'Thursday', 'thursday': 'Thursday',
-                  'fri': 'Friday', 'friday': 'Friday',
-                  'sat': 'Saturday', 'saturday': 'Saturday',
-                  'sun': 'Sunday', 'sunday': 'Sunday'
-                };
-
-                // Replace abbreviated days with full names
-                Object.entries(dayMap).forEach(([abbr, full]) => {
-                  const regex = new RegExp(`\\b${abbr}\\b`, 'i');
-                  if (regex.test(patternText)) {
-                    patternText = patternText.replace(regex, full);
-                  }
-                });
-
-                // Capitalize first letter
-                let displayText = patternText.charAt(0).toUpperCase() + patternText.slice(1);
-
-                // Only parse time if it's NOT an interval-based pattern (minutes/hours)
-                // For "every 5 minutes" or "every 2 hours", the number is the interval, not a clock time
-                const isIntervalBased = patternText.includes('minute') || patternText.includes('hour');
-                if (!isIntervalBased) {
-                  // Parse time (with or without AM/PM)
-                  const timeMatch = title.match(/\b(at\s+)?(\d{1,2})(:\d{2})?\s*(am|pm|AM|PM)?\b/i);
-                  if (timeMatch && timeMatch[2]) {
-                    let hours = parseInt(timeMatch[2], 10);
-                    const minutes = timeMatch[3] ? parseInt(timeMatch[3].slice(1), 10) : 0;
-
-                    // Parse AM/PM or use smart defaults
-                    if (timeMatch[4]) {
-                      const isPM = timeMatch[4].toLowerCase() === 'pm';
-                      if (isPM && hours !== 12) hours += 12;
-                      if (!isPM && hours === 12) hours = 0;
-                    } else if (hours >= 1 && hours <= 11) {
-                      hours += 12; // Default to PM
-                    }
-
-                    // Format time nicely
-                    const period = hours >= 12 ? 'PM' : 'AM';
-                    const displayHours = hours > 12 ? hours - 12 : (hours === 0 ? 12 : hours);
-                    const formattedTime = `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
-
-                    displayText += ` at ${formattedTime}`;
-                  }
-                }
-
+              // Check for recurring pattern
+              const detectedRecurrence = parseRecurrenceFromText(title);
+              if (detectedRecurrence) {
+                const displayText = formatRecurrence(detectedRecurrence);
                 return (
                   <div className="text-xs text-gray-500 mt-1">
                     Recurring pattern detected: {displayText}

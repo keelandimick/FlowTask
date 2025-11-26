@@ -63,7 +63,9 @@ export type RecurrenceFrequency = 'minutely' | 'hourly' | 'daily' | 'weekly' | '
 export interface RecurrenceSettings {
   frequency: RecurrenceFrequency;
   time: string; // HH:MM format, defaults to 09:00
+  interval?: number; // For minutely/hourly: the interval
   daysOfWeek?: number[]; // For weekly: 0 = Sunday, 6 = Saturday
-  dayOfMonth?: number; // For monthly
+  dayOfMonth?: number; // For monthly/yearly: day of month (1-31)
+  monthOfYear?: number; // For yearly: month (1-12)
   originalText?: string; // Store the original pattern text like "every other Thursday"
 }

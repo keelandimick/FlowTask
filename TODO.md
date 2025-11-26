@@ -36,7 +36,3 @@
 - Support common file types (images, PDFs, documents)
 - Store files in Supabase Storage
 
-### 4. Move Title & Date Editing to Context Menu (Web)
-- Remove inline title and date editing from Notes section
-- Add to right-click context menu options instead
-- Streamline Notes panel UX
