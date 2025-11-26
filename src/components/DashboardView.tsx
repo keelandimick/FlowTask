@@ -122,7 +122,9 @@ export const DashboardView: React.FC = () => {
     }
   }, [showUserMenu]);
 
-  if (loading) {
+  // Only show loading spinner on initial load (when we have no items yet)
+  // This prevents getting stuck on "Loading tasks..." during background polling
+  if (loading && items.length === 0) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-gray-600">Loading tasks...</div>
