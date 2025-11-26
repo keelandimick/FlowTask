@@ -50,7 +50,8 @@ export const useStoreWithAuth = () => {
     return () => {
       clearInterval(interval);
     };
-  }, [userId, user?.email, store]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, user?.email]);
 
   // Create wrapped functions that automatically include userId
   const addItem = async (item: Omit<Item, 'id' | 'createdAt' | 'updatedAt' | 'notes'>) => {
