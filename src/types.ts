@@ -45,6 +45,7 @@ export interface List {
   icon?: string;
   isLocked?: boolean;
   sharedWith?: string[];
+  userId?: string;
   createdAt: Date;
   updatedAt: Date;
 }

@@ -7,18 +7,14 @@ import { useAuth } from '../contexts/AuthContext';
 import { Item } from '../types';
 
 export const DashboardView: React.FC = () => {
-  const { items, currentListId, loading, setSelectedItem, setHighlightedItem, setCurrentList, setCurrentView, signOut, items: allItems, selectedItemId, setDashboardView } = useStoreWithAuth();
+  const { items, currentListId, loading, setSelectedItem, setHighlightedItem, setCurrentList, setCurrentView, signOut, items: allItems, selectedItemId, setDashboardView, deleteItem } = useStoreWithAuth();
   const { user } = useAuth();
   const [showUserMenu, setShowUserMenu] = React.useState(false);
   const notesOpen = !!selectedItemId;
-  const hasLoadedOnce = React.useRef(false);
 
-  // Track when initial load completes
-  React.useEffect(() => {
-    if (!loading && !hasLoadedOnce.current) {
-      hasLoadedOnce.current = true;
-    }
-  }, [loading]);
+  // Only show loading if we have NO items yet (first load)
+  // Once items exist, never show loading again
+  const hasItems = items.length > 0;
 
   // Filter items by current list if one is selected
   const filteredByList = React.useMemo(() => {
@@ -67,6 +63,22 @@ export const DashboardView: React.FC = () => {
 
   // Check if dashboard has any items
   const dashboardItems = [...nowPriorityTasks, ...upcomingReminders, ...recurringItems];
+
+  // Handler for deleting item from Notes panel (backspace on empty input)
+  const handleDeleteFromNotes = async () => {
+    if (!selectedItemId) return;
+    const selectedItem = allItems.find(i => i.id === selectedItemId);
+    if (!selectedItem) return;
+
+    if (window.confirm(`Delete "${selectedItem.title}"?`)) {
+      try {
+        await deleteItem(selectedItemId);
+      } catch (error) {
+        console.error('Failed to delete item:', error);
+        alert('Failed to delete item. Please try again.');
+      }
+    }
+  };
 
   const handleSearchResultClick = (itemId: string) => {
     // Find the item
@@ -125,9 +137,9 @@ export const DashboardView: React.FC = () => {
     }
   }, [showUserMenu]);
 
-  // Only show loading spinner on very first load
-  // Once we've loaded once, never show the spinner again (even for empty accounts)
-  if (loading && !hasLoadedOnce.current) {
+  // Only show loading spinner on very first load (when we have no items yet)
+  // Once items exist, never show loading again - data is already visible
+  if (loading && !hasItems) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-gray-600">Loading tasks...</div>
@@ -250,7 +262,7 @@ export const DashboardView: React.FC = () => {
           {notesOpen && (
             <>
               <div className="w-px bg-gray-200" />
-              <Notes isOpen={true} />
+              <Notes isOpen={true} onDeleteItem={handleDeleteFromNotes} />
             </>
           )}
         </div>

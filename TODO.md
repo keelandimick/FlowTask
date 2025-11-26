@@ -24,11 +24,6 @@
 - OCR + AI extraction of tasks from images/PDFs
 - Bulk add extracted tasks (similar to web import)
 
-### 2. Fix Shared List Logic
-- Work out shared list logic so it actually works
-- Currently unfinished in both web and iOS
-- Ensure proper multi-user collaboration
-
 ### 3. File Attachments
 - Implement file attachment directly to items
 - Allow users to attach files to tasks/reminders

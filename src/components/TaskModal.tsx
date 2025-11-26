@@ -22,7 +22,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, mode, edi
     currentView,
     setCurrentView,
     setHighlightedItem,
-    setCurrentList
+    setCurrentList,
+    setDashboardView
   } = useStoreWithAuth();
 
   const [title, setTitle] = useState('');
@@ -95,15 +96,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, mode, edi
         targetView = 'tasks';
       }
 
-      // Switch to the target list if different from current
-      if (currentListId !== newItem.listId) {
-        setCurrentList(newItem.listId);
-      }
-
-      // Navigate to the appropriate view
-      if (targetView !== currentView) {
-        setCurrentView(targetView);
-      }
+      // Exit dashboard view and navigate to the item's list
+      setDashboardView(false);
+      setCurrentList(newItem.listId);
+      setCurrentView(targetView);
 
       // Highlight the new item after view/list change completes
       setTimeout(() => {

@@ -40,7 +40,7 @@ serve(async (req) => {
     }
 
     // Parse request body
-    const { text, reminder_date, recurrence: clientRecurrence } = await req.json()
+    const { text, reminder_date, recurrence: clientRecurrence, strip_text } = await req.json()
     if (!text || typeof text !== 'string') {
       throw new Error('Missing or invalid "text" field')
     }
@@ -48,6 +48,7 @@ serve(async (req) => {
     console.log(`Processing quick-add for user ${user.id}: "${text}"`)
     console.log('Client reminder_date:', reminder_date)
     console.log('Client recurrence:', JSON.stringify(clientRecurrence, null, 2))
+    console.log('Client strip_text:', strip_text)
 
     // Initialize OpenAI
     const openaiKey = Deno.env.get('OPENAI_API_KEY')
@@ -110,8 +111,10 @@ NEVER add punctuation. Return ONLY the JSON object, nothing else.`
     const priority = parsed.priority || 'low'
 
     // NOW strip date/time patterns AFTER AI has processed the full context
-    if (clientRecurrence?.originalText) {
-      correctedText = correctedText.replace(clientRecurrence.originalText, '').trim()
+    // Use strip_text for one-time reminders, or recurrence.originalText for recurring
+    const textToStrip = strip_text || clientRecurrence?.originalText
+    if (textToStrip) {
+      correctedText = correctedText.replace(textToStrip, '').trim()
       if (correctedText.length > 0) {
         correctedText = correctedText.charAt(0).toUpperCase() + correctedText.slice(1)
       }

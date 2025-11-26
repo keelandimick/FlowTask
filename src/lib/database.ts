@@ -162,32 +162,30 @@ export const db = {
     const { error } = await supabase
       .from('items')
       .update(updateData)
-      .eq('id', id)
-      .eq('user_id', userId); // Add user_id check for RLS
+      .eq('id', id);
 
     if (error) throw error;
   },
 
-  async deleteItem(id: string, userId: string): Promise<void> {
-    // First check if user has access to this item's list
-    const { data: item } = await supabase
-      .from('items')
-      .select('list_id')
-      .eq('id', id)
-      .single();
-    
-    if (!item) throw new Error('Item not found');
-    
-    // Verify user has access to this list
-    const lists = await this.getLists(userId);
-    if (!lists.some(l => l.id === item.list_id)) {
-      throw new Error('Access denied');
-    }
-
+  async deleteItem(id: string, _userId: string): Promise<void> {
+    // RLS handles access control for shared lists
     const { error } = await supabase
       .from('items')
       .delete()
       .eq('id', id);
+
+    if (error) throw error;
+  },
+
+  // Batch delete multiple items (optimized for emptying trash)
+  async deleteItems(ids: string[], _userId: string): Promise<void> {
+    if (ids.length === 0) return;
+
+    // RLS handles access control for shared lists
+    const { error } = await supabase
+      .from('items')
+      .delete()
+      .in('id', ids);
 
     if (error) throw error;
   },
@@ -219,7 +217,7 @@ export const db = {
     if (error) throw error;
   },
 
-  async updateNote(noteId: string, content: string, userId: string): Promise<Note> {
+  async updateNote(noteId: string, content: string, _userId: string): Promise<Note> {
     const { data, error } = await supabase
       .from('notes')
       .update({ 
@@ -291,7 +289,7 @@ export const db = {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw new Error('User not authenticated');
 
-    const payload: { text: string; reminder_date?: string; recurrence?: any } = { text };
+    const payload: { text: string; reminder_date?: string; recurrence?: any; strip_text?: string } = { text };
 
     // Parse recurrence locally first (highest priority)
     const detectedRecurrence = parseRecurrenceFromText(text);
@@ -310,8 +308,8 @@ export const db = {
       const parsed = customChrono.parse(text.trim());
       if (parsed.length > 0) {
         payload.reminder_date = parsed[0].start.date().toISOString();
-        // Store matched text so edge function can strip it
-        payload.recurrence = { originalText: parsed[0].text };
+        // Store matched text so edge function can strip it (NOT as recurrence!)
+        payload.strip_text = parsed[0].text;
       }
     }
 
@@ -338,6 +336,7 @@ export function dbListToList(dbList: DbList): List {
     icon: dbList.icon || undefined,
     isLocked: dbList.is_locked,
     sharedWith: dbList.shared_with || undefined,
+    userId: dbList.user_id,
     createdAt: new Date(dbList.created_at),
     updatedAt: new Date(dbList.updated_at),
   };

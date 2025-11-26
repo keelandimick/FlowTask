@@ -650,6 +650,12 @@ export const Sidebar: React.FC = () => {
                   if (currentView === 'trash' || currentView === 'complete') setCurrentView('tasks');
                 }}
                 onDelete={list.id !== 'default' ? async () => {
+                  // Check if user is the owner
+                  if (list.userId !== userId) {
+                    alert('Only the list owner can delete this list.');
+                    return;
+                  }
+
                   const listTasks = items.filter(item => item.listId === list.id && !item.deletedAt && item.status !== 'complete');
                   const message = listTasks.length > 0
                     ? `Delete list "${list.name}" and its ${listTasks.length} items?`
@@ -666,7 +672,7 @@ export const Sidebar: React.FC = () => {
                 } : undefined}
               />
             ))}
-            
+
             {/* Shared lists section */}
             {lists.some(list => list.sharedWith && list.sharedWith.length > 0) && (
               <>
@@ -684,6 +690,12 @@ export const Sidebar: React.FC = () => {
                       if (currentView === 'trash' || currentView === 'complete') setCurrentView('tasks');
                     }}
                     onDelete={list.id !== 'default' ? async () => {
+                      // Check if user is the owner
+                      if (list.userId !== userId) {
+                        alert('Sorry Charlie. Only the list owner can delete this list.');
+                        return;
+                      }
+
                       const listTasks = items.filter(item => item.listId === list.id && !item.deletedAt && item.status !== 'complete');
                       const message = listTasks.length > 0
                         ? `Delete list "${list.name}" and its ${listTasks.length} items?`

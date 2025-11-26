@@ -91,6 +91,7 @@ export const useStore = create<Store>((set, get) => ({
         db.getLists(userId),
         db.getItems(userId),
       ]);
+
       
       // Check if user has any lists, if not create a default one
       if (lists.length === 0) {
@@ -157,11 +158,11 @@ export const useStore = create<Store>((set, get) => ({
     set({ error: null });
     try {
       const newItem = await db.createItem(itemData, userId);
-      
+
       set((state) => ({
         items: [...state.items, newItem],
       }));
-      
+
       return newItem.id;
     } catch (error) {
       console.error('Failed to add item:', error);
@@ -350,15 +351,16 @@ export const useStore = create<Store>((set, get) => ({
     try {
       const state = get();
       const trashedItems = state.items.filter(item => item.deletedAt != null);
-      
-      // Delete all trashed items
-      await Promise.all(
-        trashedItems.map(item => db.deleteItem(item.id, userId))
-      );
-      
+
+      if (trashedItems.length === 0) return;
+
+      // Batch delete all trashed items in a single query
+      const trashedIds = trashedItems.map(item => item.id);
+      await db.deleteItems(trashedIds, userId);
+
       // Check if selected item is in trash
       const selectedItemInTrash = trashedItems.some(item => item.id === state.selectedItemId);
-      
+
       set((state) => ({
         items: state.items.filter((item) => !item.deletedAt),
         // Clear selected item if it was in trash
@@ -585,7 +587,7 @@ export const useStore = create<Store>((set, get) => ({
   
   getFilteredItems: () => {
     const { items, currentListId, currentView } = get();
-    
+
     let filteredItems: Item[] = [];
     
     // For trash view, show all deleted items
@@ -602,13 +604,13 @@ export const useStore = create<Store>((set, get) => ({
         .filter((item) => {
           // Exclude deleted items
           if (item.deletedAt) return false;
-          
+
           // Filter by current list (unless viewing "all")
           if (currentListId !== 'all' && item.listId !== currentListId) return false;
-          
+
           if (currentView === 'recurring') {
-            // Only show items with recurrence
-            return item.recurrence !== undefined;
+            // Only show items with recurrence (check for both null and undefined)
+            return item.recurrence != null;
           }
           // For reminders view, show reminders without recurrence
           return item.type === 'reminder' && !item.recurrence;

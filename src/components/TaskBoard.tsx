@@ -26,9 +26,11 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ activeId, notesOpen }) => 
     setSelectedItem,
     setHighlightedItem,
     highlightedItemId,
+    selectedItemId,
     setCurrentList,
     items: allItems,
     updateItem,
+    deleteItem,
     signOut
   } = useStoreWithAuth();
   const { user } = useAuth();
@@ -73,6 +75,25 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ activeId, notesOpen }) => 
   };
   
   const items = getFilteredItems();
+
+  // Handler for deleting item from Notes panel (backspace on empty input)
+  const handleDeleteFromNotes = async () => {
+    if (!selectedItemId) return;
+    const selectedItem = allItems.find(i => i.id === selectedItemId);
+    if (!selectedItem) return;
+
+    // Don't allow delete from trash or complete views
+    if (currentView === 'trash' || currentView === 'complete') return;
+
+    if (window.confirm(`Delete "${selectedItem.title}"?`)) {
+      try {
+        await deleteItem(selectedItemId);
+      } catch (error) {
+        console.error('Failed to delete item:', error);
+        alert('Failed to delete item. Please try again.');
+      }
+    }
+  };
 
   const taskColumns: { id: TaskStatus; title: string }[] = [
     { id: 'start', title: 'Start' },
@@ -531,7 +552,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ activeId, notesOpen }) => 
               {notesOpen && (
                 <>
                   <div className="w-px bg-gray-200" />
-                  <Notes isOpen={true} />
+                  <Notes isOpen={true} onDeleteItem={handleDeleteFromNotes} />
                 </>
               )}
             </>
@@ -554,7 +575,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ activeId, notesOpen }) => 
                   )}
                 </React.Fragment>
               ))}
-              {notesOpen && <Notes isOpen={true} />}
+              {notesOpen && <Notes isOpen={true} onDeleteItem={handleDeleteFromNotes} />}
             </>
           )}
         </div>

@@ -510,6 +510,21 @@ export const TaskCard: React.FC<TaskCardProps> = ({ item }) => {
               },
               disabled: !!item.recurrence, // Disable for recurring items
             },
+            {
+              label: 'Delete',
+              icon: '🗑️',
+              onClick: async () => {
+                setContextMenu(null);
+                if (window.confirm(`Delete "${item.title}"?`)) {
+                  try {
+                    await deleteItem(item.id);
+                  } catch (error) {
+                    console.error('Failed to delete item:', error);
+                    alert('Failed to delete item. Please try again.');
+                  }
+                }
+              },
+            },
           ]}
         />
       )}

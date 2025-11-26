@@ -6,9 +6,10 @@ import { formatRecurrence } from '../lib/formatRecurrence';
 
 interface NotesProps {
   isOpen: boolean;
+  onDeleteItem?: () => void;
 }
 
-export const Notes: React.FC<NotesProps> = ({ isOpen }) => {
+export const Notes: React.FC<NotesProps> = ({ isOpen, onDeleteItem }) => {
   const { selectedItemId, items, addNote, deleteNote, updateNote, updateItem } = useStoreWithAuth();
   const [noteInput, setNoteInput] = useState('');
   const [showOnHoldTag, setShowOnHoldTag] = useState(false);
@@ -426,6 +427,10 @@ export const Notes: React.FC<NotesProps> = ({ isOpen }) => {
                           // Second Esc (or first if empty): Blur to allow App.tsx to close Notes
                           e.currentTarget.blur();
                         }
+                      } else if ((e.key === 'Backspace' || e.key === 'Delete') && !noteInput && onDeleteItem) {
+                        // Backspace/Delete on empty input triggers item deletion
+                        e.preventDefault();
+                        onDeleteItem();
                       }
                     }}
                     placeholder="Add a note..."
