@@ -150,12 +150,7 @@ export const useStore = create<Store>((set, get) => ({
       });
 
       // Set up realtime subscriptions after data loads
-      try {
-        get().setupRealtimeSubscriptions();
-      } catch (realtimeError) {
-        console.error('[Realtime] Failed to setup subscriptions:', realtimeError);
-        // Don't fail the entire load if realtime fails
-      }
+      get().setupRealtimeSubscriptions();
     } catch (error) {
       clearTimeout(timeout);
       console.error('Failed to load data:', error);
@@ -928,9 +923,7 @@ export const useStore = create<Store>((set, get) => ({
           }
         }
       )
-      .subscribe((status) => {
-        console.log('[Realtime] Items channel status:', status);
-      });
+      .subscribe();
 
     // Subscribe to lists table changes (for all accessible lists being updated/deleted)
     realtimeChannels.lists = supabase
@@ -956,9 +949,7 @@ export const useStore = create<Store>((set, get) => ({
           }
         }
       )
-      .subscribe((status) => {
-        console.log('[Realtime] Lists channel status:', status);
-      });
+      .subscribe();
 
     // Subscribe to notes table changes
     realtimeChannels.notes = supabase
@@ -982,9 +973,7 @@ export const useStore = create<Store>((set, get) => ({
           }
         }
       )
-      .subscribe((status) => {
-        console.log('[Realtime] Notes channel status:', status);
-      });
+      .subscribe();
   },
 
   // Clean up Realtime subscriptions
