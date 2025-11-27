@@ -101,8 +101,12 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, mode, edi
       setCurrentList(newItem.listId);
       setCurrentView(targetView);
 
-      // Highlight the new item after view/list change completes
+      // Scroll to and highlight the new item after view/list change completes
       setTimeout(() => {
+        const element = document.getElementById(`item-${newItem.id}`);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
         setHighlightedItem(newItem.id);
       }, 100);
     } catch (error) {

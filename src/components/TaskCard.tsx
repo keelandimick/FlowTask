@@ -289,19 +289,23 @@ export const TaskCard: React.FC<TaskCardProps> = ({ item }) => {
                               setCurrentView('tasks');
                               setCurrentList(item.listId);
 
-                              // Highlight the item after navigation
+                              // Scroll to and highlight the item after navigation
                               setTimeout(() => {
-                                setSelectedItem(item.id);
+                                const element = document.getElementById(`item-${item.id}`);
+                                if (element) {
+                                  element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                }
                                 setHighlightedItem(item.id);
-
-                                // Scroll to item
-                                setTimeout(() => {
-                                  const element = document.getElementById(`item-${item.id}`);
-                                  if (element) {
-                                    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                  }
-                                }, 100);
-                              }, 50);
+                              }, 100);
+                            } else {
+                              // For non-dashboard views, just highlight and scroll (item stays in view)
+                              setTimeout(() => {
+                                const element = document.getElementById(`item-${item.id}`);
+                                if (element) {
+                                  element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                }
+                                setHighlightedItem(item.id);
+                              }, 100);
                             }
                           } catch (error) {
                             console.error('Failed to update priority:', error);
@@ -391,6 +395,29 @@ export const TaskCard: React.FC<TaskCardProps> = ({ item }) => {
                   onClick={async () => {
                     await updateItem(item.id, { listId: list.id });
                     setShowMoveToList(false);
+
+                    // In Dashboard view: no navigation, just update the list
+                    if (isDashboardView) return;
+
+                    // Determine target view based on item type
+                    let targetView: 'tasks' | 'reminders' | 'recurring' = 'tasks';
+                    if (item.recurrence) {
+                      targetView = 'recurring';
+                    } else if (item.type === 'reminder') {
+                      targetView = 'reminders';
+                    }
+
+                    // Navigate to the new list and highlight
+                    setCurrentList(list.id);
+                    setCurrentView(targetView);
+
+                    setTimeout(() => {
+                      const element = document.getElementById(`item-${item.id}`);
+                      if (element) {
+                        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }
+                      setHighlightedItem(item.id);
+                    }, 100);
                   }}
                   className={`w-full text-left px-4 py-3 rounded border ${
                     list.id === item.listId
@@ -439,8 +466,24 @@ export const TaskCard: React.FC<TaskCardProps> = ({ item }) => {
               {item.type === 'reminder' && item.reminderDate && (
                 <button
                   onClick={async () => {
-                    await updateItem(item.id, { type: 'task', status: 'start' } as any);
+                    await updateItem(item.id, { type: 'task', status: 'start', reminderDate: null } as any);
                     setShowDatePicker(false);
+
+                    // Navigate to tasks view and highlight
+                    if (isDashboardView) setDashboardView(false);
+                    setCurrentList(item.listId);
+                    setCurrentView('tasks');
+
+                    setTimeout(() => {
+                      setSelectedItem(item.id);
+                      setHighlightedItem(item.id);
+                      setTimeout(() => {
+                        const element = document.getElementById(`item-${item.id}`);
+                        if (element) {
+                          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                      }, 100);
+                    }, 50);
                   }}
                   className="px-4 py-2 text-red-600 hover:bg-red-50 rounded"
                 >
@@ -456,13 +499,42 @@ export const TaskCard: React.FC<TaskCardProps> = ({ item }) => {
               <button
                 onClick={async () => {
                   if (selectedDate) {
+                    // Calculate appropriate status based on date
+                    const now = new Date();
+                    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                    const selectedDateOnly = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+                    const diffTime = selectedDateOnly.getTime() - todayStart.getTime();
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                    let status: 'today' | 'within7' | '7plus' = 'within7';
+                    if (diffDays <= 0) status = 'today';
+                    else if (diffDays <= 7) status = 'within7';
+                    else status = '7plus';
+
                     await updateItem(item.id, {
                       reminderDate: selectedDate,
                       type: 'reminder',
-                      status: 'within7',
+                      status,
                     } as any);
+
+                    setShowDatePicker(false);
+
+                    // Navigate to reminders view and highlight
+                    if (isDashboardView) setDashboardView(false);
+                    setCurrentList(item.listId);
+                    setCurrentView('reminders');
+
+                    setTimeout(() => {
+                      setSelectedItem(item.id);
+                      setHighlightedItem(item.id);
+                      setTimeout(() => {
+                        const element = document.getElementById(`item-${item.id}`);
+                        if (element) {
+                          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                      }, 100);
+                    }, 50);
                   }
-                  setShowDatePicker(false);
                 }}
                 className="flex-1 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
               >

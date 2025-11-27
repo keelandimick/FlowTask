@@ -58,20 +58,14 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ activeId, notesOpen }) => 
       setCurrentView('reminders');
     }
 
-    // Select and highlight the item after view/list change completes
-    // Use setTimeout to ensure this happens after the view change useEffect
+    // Scroll to and highlight the item after view/list change completes
     setTimeout(() => {
-      setSelectedItem(itemId);
+      const element = document.getElementById(`item-${itemId}`);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
       setHighlightedItem(itemId);
-
-      // Scroll to the item after selection
-      setTimeout(() => {
-        const element = document.getElementById(`item-${itemId}`);
-        if (element) {
-          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-      }, 100);
-    }, 50);
+    }, 100);
   };
   
   const items = getFilteredItems();

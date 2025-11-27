@@ -6,28 +6,20 @@
 - Both web (.env) and iOS (SupabaseService.swift:699) expose API keys client-side
 - Solution: Move AI categorization to Supabase Edge Function (like Quick Add already does)
 
-### Status Field Overloaded (Low Priority)
-- `status` field serves different purposes: tasks (workflow), reminders (time proximity), recurring (frequency)
-- Could use proper field separation eventually
-
-### iOS Realtime Subscription (Medium Priority)
-- Not receiving INSERT events from web → items only appear after manual refresh
-- Likely cause: RLS policies blocking realtime events
-- Workaround: Manual refresh works
-
 ---
 
 ## Todos
 
-### 1. Bulk Import from Image/PDF (iOS)
-- Camera/photo library integration
-- OCR + AI extraction of tasks from images/PDFs
-- Bulk add extracted tasks (similar to web import)
-
-### 3. File Attachments
+### 1. File Attachments
 - Implement file attachment directly to items
 - Allow users to attach files to tasks/reminders
 - Display attached files in Notes section
 - Support common file types (images, PDFs, documents)
 - Store files in Supabase Storage
 
+### 2. Silent Push Notifications (iOS Background Sync)
+- Enable notifications for reminders created on web without opening iOS app
+- Setup APNs (Apple Push Notification Service) in Apple Developer account
+- Create Supabase Edge Function to send silent push when reminder is created
+- iOS receives silent push, wakes briefly, syncs task, schedules local notification
+- Ensures cross-platform reminder notifications work reliably

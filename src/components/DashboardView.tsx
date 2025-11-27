@@ -24,12 +24,13 @@ export const DashboardView: React.FC = () => {
     return items.filter(item => !item.deletedAt);
   }, [items, currentListId]);
 
-  // NOW Priority Tasks (non-recurring)
+  // NOW Priority Tasks (non-recurring, no reminder date - those go in Today & Upcoming)
   const nowPriorityTasks = React.useMemo(() => {
     return filteredByList
       .filter(item =>
         item.priority === 'now' &&
         !item.recurrence &&
+        !(item.type === 'reminder' && item.reminderDate) &&  // Exclude reminders with dates - they show in Today & Upcoming
         item.status !== 'complete'
       )
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()); // Newest first
@@ -100,19 +101,14 @@ export const DashboardView: React.FC = () => {
       setCurrentView('reminders');
     }
 
-    // Select and highlight the item after view/list change completes
+    // Scroll to and highlight the item after view/list change completes
     setTimeout(() => {
-      setSelectedItem(itemId);
+      const element = document.getElementById(`item-${itemId}`);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
       setHighlightedItem(itemId);
-
-      // Scroll to the item after selection
-      setTimeout(() => {
-        const element = document.getElementById(`item-${itemId}`);
-        if (element) {
-          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-      }, 100);
-    }, 50);
+    }, 100);
   };
 
   // Close user menu when clicking outside

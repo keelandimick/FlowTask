@@ -23,7 +23,7 @@ import { TaskStatus, ReminderStatus } from './types';
 
 function App() {
   const { user, loading } = useAuth();
-  const { updateItem, moveItem, getFilteredItems, currentView, currentListId, displayMode, isDashboardView, setDashboardView, setSelectedItem, setHighlightedItem, selectedItemId } = useStoreWithAuth();
+  const { updateItem, moveItem, getFilteredItems, currentView, currentListId, displayMode, isDashboardView, setDashboardView, setSelectedItem, setHighlightedItem, selectedItemId, setCurrentList } = useStoreWithAuth();
   const [activeId, setActiveId] = React.useState<string | null>(null);
   const items = getFilteredItems();
   const notesOpen = !!selectedItemId;
@@ -37,6 +37,7 @@ function App() {
     const hasLaunchedBefore = localStorage.getItem('hasLaunchedBefore');
     if (!hasLaunchedBefore && user) {
       setDashboardView(true);
+      setCurrentList('');  // Clear list filter so Dashboard shows all lists
       localStorage.setItem('hasLaunchedBefore', 'true');
     }
 
@@ -52,8 +53,9 @@ function App() {
           const timeInBackground = Date.now() - parseInt(backgroundTimestamp, 10);
 
           if (timeInBackground > DASHBOARD_RESET_THRESHOLD) {
-            // Was in background for > 30 minutes → show Dashboard
+            // Was in background for > 30 minutes → show Dashboard with all lists
             setDashboardView(true);
+            setCurrentList('');  // Clear list filter so Dashboard shows all lists
             console.log(`📊 App was in background for ${Math.round(timeInBackground / 60000)} minutes → showing Dashboard`);
           } else {
             // Quick switch → keep current view
@@ -65,7 +67,7 @@ function App() {
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [user, setDashboardView, DASHBOARD_RESET_THRESHOLD]);
+  }, [user, setDashboardView, setCurrentList, DASHBOARD_RESET_THRESHOLD]);
 
   // Get items in visual order for keyboard navigation
   const getVisuallyOrderedItems = () => {

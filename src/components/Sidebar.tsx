@@ -343,7 +343,7 @@ const DroppableListItem: React.FC<DroppableListItemProps> = ({ list, isActive, o
 };
 
 export const Sidebar: React.FC = () => {
-  const { lists, currentListId, setCurrentList, currentView, setCurrentView, isDashboardView, setDashboardView, addList, deleteList, items, loading, addItem, deleteItem } = useStoreWithAuth();
+  const { lists, currentListId, setCurrentList, currentView, setCurrentView, isDashboardView, setDashboardView, addList, deleteList, items, loading, addItem, deleteItem, setSelectedItem } = useStoreWithAuth();
   const { user } = useAuth();
   const userId = user?.id;
 
@@ -573,6 +573,7 @@ export const Sidebar: React.FC = () => {
                 onClick={() => {
                   setDashboardView(true);
                   setCurrentList('');  // Clear list selection
+                  setSelectedItem(null);  // Clear item selection
                   if (currentView === 'trash' || currentView === 'complete') setCurrentView('tasks');
                 }}
                 className={`group relative w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center ${
@@ -603,6 +604,7 @@ export const Sidebar: React.FC = () => {
                   onSelect={() => {
                     setCurrentList('all');
                     setDashboardView(false);
+                    setSelectedItem(null);  // Clear item selection
                     if (currentView === 'trash' || currentView === 'complete') setCurrentView('tasks');
                   }}
                 />
@@ -647,6 +649,7 @@ export const Sidebar: React.FC = () => {
                 onSelect={() => {
                   setCurrentList(list.id);
                   setDashboardView(false);
+                  setSelectedItem(null);  // Clear item selection
                   if (currentView === 'trash' || currentView === 'complete') setCurrentView('tasks');
                 }}
                 onDelete={list.id !== 'default' ? async () => {
@@ -687,6 +690,7 @@ export const Sidebar: React.FC = () => {
                     onSelect={() => {
                       setCurrentList(list.id);
                       setDashboardView(false);
+                      setSelectedItem(null);  // Clear item selection
                       if (currentView === 'trash' || currentView === 'complete') setCurrentView('tasks');
                     }}
                     onDelete={list.id !== 'default' ? async () => {
@@ -723,6 +727,7 @@ export const Sidebar: React.FC = () => {
           onClick={() => {
             setCurrentView('complete');
             setCurrentList(''); // Clear the selected list when complete is selected
+            setSelectedItem(null);  // Clear item selection
             setDashboardView(false); // Exit Dashboard
           }}
           className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
@@ -739,6 +744,7 @@ export const Sidebar: React.FC = () => {
           onClick={() => {
             setCurrentView('trash');
             setCurrentList(''); // Clear the selected list when trash is selected
+            setSelectedItem(null);  // Clear item selection
             setDashboardView(false); // Exit Dashboard
           }}
           className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
