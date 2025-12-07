@@ -5,11 +5,13 @@ import { SearchBar } from './SearchBar';
 import { Notes } from './Notes';
 import { useAuth } from '../contexts/AuthContext';
 import { Item } from '../types';
+import { PrintDashboard } from './PrintDashboard';
 
 export const DashboardView: React.FC = () => {
   const { items, currentListId, loading, setSelectedItem, setHighlightedItem, setCurrentList, setCurrentView, signOut, items: allItems, selectedItemId, setDashboardView, deleteItem } = useStoreWithAuth();
   const { user } = useAuth();
   const [showUserMenu, setShowUserMenu] = React.useState(false);
+  const [showPrintModal, setShowPrintModal] = React.useState(false);
   const notesOpen = !!selectedItemId;
 
   // Only show loading if we have NO items yet (first load)
@@ -183,10 +185,21 @@ export const DashboardView: React.FC = () => {
       </div>
 
       {/* Title header matching TaskBoard style */}
-      <div className="px-6 pt-2 pb-2 flex items-center justify-center">
+      <div className="px-6 pt-2 pb-2 flex items-center justify-center relative">
         <h2 className="text-2xl font-semibold" style={{ color: '#8B5CF6' }}>
           Dashboard
         </h2>
+        {dashboardItems.length > 0 && (
+          <button
+            onClick={() => setShowPrintModal(true)}
+            className="absolute right-6 text-gray-400 hover:text-gray-600 transition-colors"
+            title="Print Dashboard"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+            </svg>
+          </button>
+        )}
       </div>
 
       {/* Dashboard content */}
@@ -263,6 +276,15 @@ export const DashboardView: React.FC = () => {
           )}
         </div>
       )}
+
+      {/* Print Modal */}
+      <PrintDashboard
+        isOpen={showPrintModal}
+        onClose={() => setShowPrintModal(false)}
+        nowPriorityTasks={nowPriorityTasks}
+        upcomingReminders={upcomingReminders}
+        recurringItems={recurringItems}
+      />
     </div>
   );
 };
