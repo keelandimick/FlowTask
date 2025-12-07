@@ -122,15 +122,9 @@ export const Notes: React.FC<NotesProps> = ({ isOpen, onDeleteItem, readOnly = f
     if (!editingContent.trim() || !selectedItem || isEditProcessing) return;
 
     setIsEditProcessing(true);
-    let processedContent = editingContent.trim();
+    const processedContent = editingContent.trim();
 
     try {
-      // Process note with AI for spell correction (unless it's an ON HOLD note)
-      if (!processedContent.toLowerCase().startsWith('on hold') && processedContent.toLowerCase() !== 'off hold') {
-        const aiResult = await processTextWithAI(processedContent);
-        processedContent = aiResult.correctedText || processedContent;
-      }
-
       await updateNote(selectedItem.id, noteId, processedContent);
       setEditingNoteId(null);
       setEditingContent('');
